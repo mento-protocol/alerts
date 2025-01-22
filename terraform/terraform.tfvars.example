@@ -1,0 +1,16 @@
+# Sentry auth token (from https://sentry.io/settings/account/api/auth-tokens/)
+# Required scopes: project:read, project:write, team:read, org:read, alerts:write
+sentry_auth_token = "your-sentry-token"
+
+# Discord bot token (from Discord Developer Portal)
+# Required permissions: Administrator
+discord_bot_token = "your-bot-token"
+
+# Discord server ID (right-click server with Developer Mode enabled)
+discord_server_id = "your-server-id"
+
+# Discord category ID where alert channels will be created (right-click category and copy ID)
+discord_category_id = "your-category-id"
+
+# Discord role ID for the Sentry integration (right-click Sentry role and copy ID)
+discord_sentry_role_id = "your-sentry-role-id" 
