@@ -115,7 +115,7 @@ resource "sentry_issue_alert" "discord_alerts" {
     discord_notify_service = {
       server     = data.sentry_organization_integration.discord.id
       channel_id = discord_text_channel.sentry_alerts[each.key].id
-      tags       = ["browser", "user", "environment", "release"]
+      tags       = ["url", "browser", "device", "os", "environment", "level", "handled"]
     }
   }]
 }
