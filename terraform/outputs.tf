@@ -1,18 +1,41 @@
-output "organization" {
+######################
+# Sentry Module Outputs
+######################
+
+output "sentry_organization" {
   description = "The Sentry organization details"
-  value       = data.sentry_organization.main
+  value       = module.sentry_alerts.sentry_organization
 }
 
-output "team" {
+output "sentry_team" {
   description = "The Sentry team ID"
-  value       = data.sentry_team.main.id
+  value       = module.sentry_alerts.sentry_team
 }
 
-output "webhook_urls" {
-  description = "Discord channel IDs for each project's alerts"
+output "sentry_discord_channels" {
+  description = "Discord channel IDs for Sentry alerts"
+  value       = module.sentry_alerts.discord_channels
+}
+
+output "sentry_projects" {
+  description = "List of monitored Sentry projects"
+  value       = module.sentry_alerts.sentry_projects
+}
+
+######################
+# Combined Summary
+######################
+
+output "monitoring_summary" {
+  description = "Overall monitoring configuration summary"
   value = {
-    for project, channel in discord_text_channel.sentry_alerts :
-    trimprefix(project, "sentry-") => channel.id
+    sentry = {
+      projects = length(module.sentry_alerts.sentry_projects)
+      channels = length(module.sentry_alerts.discord_channels)
+    }
+    multisigs = {
+      count    = length(var.multisigs)
+      channels = length(var.multisigs) * 2
+    }
   }
-  sensitive = true
 }

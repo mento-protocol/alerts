@@ -1,11 +1,22 @@
 ######################
-# Sentry Variables
+# Tenderly Variables
 ######################
 
-variable "sentry_auth_token" {
-  description = "Sentry authentication token"
+variable "tenderly_api_key" {
+  description = "Tenderly API key for authentication"
   type        = string
   sensitive   = true
+}
+
+variable "tenderly_project_slug" {
+  description = "Tenderly project slug (found in project URL)"
+  type        = string
+}
+
+variable "tenderly_account_id" {
+  description = "Tenderly account ID (use 'me' for current account)"
+  type        = string
+  default     = "me"
 }
 
 ######################
@@ -25,11 +36,6 @@ variable "discord_server_id" {
 
 variable "discord_category_id" {
   description = "Discord category ID where alert channels will be created"
-  type        = string
-}
-
-variable "discord_sentry_role_id" {
-  description = "Discord role ID for the Sentry integration (right-click the Sentry role on Discord and copy ID)"
   type        = string
 }
 
@@ -63,4 +69,20 @@ variable "debug_mode" {
   description = "Enable debug mode for REST API provider"
   type        = bool
   default     = false
+}
+
+variable "tenderly_delivery_channels" {
+  description = "Tenderly delivery channel IDs (must be created via UI first)"
+  type = object({
+    mento_labs_alerts = string
+    mento_labs_events = string
+    reserve_alerts    = string
+    reserve_events    = string
+  })
+  default = {
+    mento_labs_alerts = ""
+    mento_labs_events = ""
+    reserve_alerts    = ""
+    reserve_events    = ""
+  }
 }

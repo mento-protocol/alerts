@@ -1,0 +1,43 @@
+# Tenderly Provider Configuration
+# Add this to your main.tf to enable Tenderly monitoring
+
+provider "restapi" {
+  uri = "https://api.tenderly.co/api/v1"
+  headers = {
+    "X-Access-Key" = var.tenderly_api_key
+    "Content-Type" = "application/json"
+  }
+  write_returns_object = true
+  debug                = var.debug_mode
+}
+
+# Tenderly Alerts Module
+# Add this module declaration to deploy Tenderly monitoring
+
+module "tenderly_alerts" {
+  source = "./tenderly-alerts-archived/module"
+
+  # Tenderly configuration
+  tenderly_api_key           = var.tenderly_api_key
+  tenderly_project_slug      = var.tenderly_project_slug
+  tenderly_account_id        = var.tenderly_account_id
+  tenderly_delivery_channels = var.tenderly_delivery_channels
+
+  # Discord configuration (using existing Discord provider)
+  discord_bot_token   = var.discord_bot_token
+  discord_server_id   = var.discord_server_id
+  discord_category_id = var.discord_category_id
+
+  # Multisig configuration
+  multisigs = var.multisig_safes
+
+  # Debug mode
+  debug_mode = var.debug_mode
+
+  # Provider configuration
+  providers = {
+    restapi         = restapi
+    restapi.discord = restapi.discord
+    discord         = discord
+  }
+}

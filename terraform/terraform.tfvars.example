@@ -1,6 +1,14 @@
+######################
+# Sentry Configuration
+######################
+
 # Sentry auth token (from https://sentry.io/settings/account/api/auth-tokens/)
 # Required scopes: project:read, project:write, team:read, org:read, alerts:write
 sentry_auth_token = "your-sentry-token"
+
+######################
+# Discord Configuration
+######################
 
 # Discord bot token (from Discord Developer Portal)
 # Required permissions: Administrator
@@ -13,4 +21,39 @@ discord_server_id = "your-server-id"
 discord_category_id = "your-category-id"
 
 # Discord role ID for the Sentry integration (right-click Sentry role and copy ID)
-discord_sentry_role_id = "your-sentry-role-id" 
+discord_sentry_role_id = "your-sentry-role-id"
+
+######################
+# Optional Settings
+######################
+
+# Enable debug mode for REST API provider (shows API requests/responses)
+# debug_mode = true
+
+######################
+# Multisig Configuration
+######################
+
+# Note: Tenderly integration code has been archived in terraform/tenderly-alerts-archived/
+# due to pricing concerns. The code is fully functional and can be re-enabled if needed.
+# We now use QuickNode Webhooks for blockchain event monitoring.
+
+# Option 1: Use default multisigs (Mento Labs and Reserve)
+# The default configuration in variables.tf includes both multisigs
+
+# Option 2: Override with your own multisigs
+# multisigs = {
+#   "mento-labs" = {
+#     name    = "Mento Labs Multisig"
+#     address = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
+#   }
+#   "reserve" = {
+#     name    = "Reserve Multisig"
+#     address = "0x87647780180B8f55980C7D3fFeFe08a9B29e9aE1"
+#   }
+#   # Add more multisigs as needed:
+#   # "treasury" = {
+#   #   name    = "Treasury Multisig"
+#   #   address = "0xYourTreasuryAddress..."
+#   # }
+# }

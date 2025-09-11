@@ -1,0 +1,31 @@
+######################
+# Tenderly Configuration Example
+######################
+
+# API key from https://dashboard.tenderly.co/account/authorization
+tenderly_api_key = "your-tenderly-api-key"
+
+# Account ID (use "me" for current account)
+tenderly_account_id = "me"
+
+# Project slug from your project URL
+# Example: https://dashboard.tenderly.co/account/<account-id>/project/<project_slug>
+tenderly_project_slug = "your-project-slug"
+
+# Delivery channel IDs (must be created via Tenderly UI first)
+# See docs/TENDERLY_SETUP.md and docs/GET_CHANNEL_IDS.md for instructions
+# Use the API to retrieve these IDs:
+# curl --request GET \
+#   --url "https://api.tenderly.co/api/v1/account/me/delivery-channels" \
+#   --header 'Accept: application/json' \
+#   --header "X-Access-Key: YOUR_API_KEY"
+
+tenderly_delivery_channels = {
+  mento_labs_alerts = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  mento_labs_events = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  reserve_alerts    = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  reserve_events    = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+}
+
+# Enable debug mode for REST API provider (shows API requests/responses)
+debug_mode = true

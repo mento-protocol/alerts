@@ -1,0 +1,30 @@
+# Tenderly Module Outputs
+# Add these to your outputs.tf to expose Tenderly monitoring information
+
+output "tenderly_discord_channels" {
+  description = "Discord channels created for Tenderly alerts"
+  value       = module.tenderly_alerts.discord_channels
+}
+
+output "tenderly_webhook_urls" {
+  description = "Discord webhook URLs for Tenderly alerts"
+  value       = module.tenderly_alerts.webhook_urls
+  sensitive   = true
+}
+
+output "tenderly_alerts_summary" {
+  description = "Summary of Tenderly alerts configuration"
+  value       = module.tenderly_alerts.tenderly_alerts_summary
+}
+
+output "tenderly_alert_configuration" {
+  description = "Detailed Tenderly alert configuration"
+  value       = module.tenderly_alerts.alert_configuration
+}
+
+# Add to multisig_monitoring_summary output:
+# tenderly = {
+#   project   = var.tenderly_project_slug
+#   channels  = length(module.tenderly_alerts.discord_channels) * 2
+#   alerts    = module.tenderly_alerts.tenderly_alerts_summary.total_alerts
+# }
