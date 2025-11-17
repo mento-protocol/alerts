@@ -1,0 +1,7 @@
+{
+  // Syntax highlighting for Terraform template files
+  // Treat .tpl files as JavaScript since they contain JS code with Terraform template syntax
+  "files.associations": {
+    "*.tpl": "javascript"
+  }
+}

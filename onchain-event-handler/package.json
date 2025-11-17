@@ -1,0 +1,49 @@
+{
+  "name": "onchain-event-handler",
+  "version": "1.0.0",
+  "description": "Routes QuickNode webhook events to Discord for Safe multisig monitoring",
+  "main": "dist/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "rimraf dist && tsc",
+    "start": "NODE_ENV=development functions-framework --target=processQuicknodeWebhook",
+    "prestart": "npm run build",
+    "test": "npm run test:local",
+    "dev": "nodemon --ext ts --ignore dist --exec \"npm run start\"",
+    "deploy": "./scripts/deploy.sh",
+    "logs": "./scripts/get-function-logs.sh",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.{ts,js,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,js,json}\"",
+    "generate:env": "terraform -chdir=.. apply -target=module.onchain_event_handler.local_file.env_file",
+    "test:local": "./scripts/test-local.sh"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.3.0",
+    "axios": "^1.7.9",
+    "dotenv": "^17.2.3",
+    "env-schema": "^7.0.0",
+    "keccak": "^3.0.4",
+    "viem": "^2.39.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/keccak": "^3.0.5",
+    "@types/node": "^22.10.5",
+    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "eslint": "^9.18.0",
+    "nodemon": "^3.1.11",
+    "prettier": "^3.6.2",
+    "rimraf": "^6.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.2"
+  },
+  "overrides": {
+    "js-yaml": "^4.1.1"
+  }
+}

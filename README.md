@@ -1,160 +1,207 @@
 # Mento Alerts
 
-This repository manages alert rules for monitoring Mento's infrastructure using Terraform.
+Terraform-managed alert infrastructure for monitoring Mento's infrastructure across multiple blockchain networks.
 
 ## 📦 Module Structure
 
 ```plain
-terraform/
+.
 ├── main.tf                 # Root configuration and module orchestration
 ├── variables.tf            # Shared variable definitions
 ├── outputs.tf              # Aggregated outputs
 │
 ├── sentry-alerts/          # Sentry JS error monitoring
-│   ├── main.tf
-│   ├── providers.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── README.md
-│
-├── discord-monitoring.tf   # Shared Discord infrastructure
-├── safe-event-signatures.md # Event signatures reference
-└── tenderly-alerts-archived/ # Archived Tenderly integration
-    └── README.md             # See archive for full details
+├── onchain-event-listeners/ # QuickNode webhook management for on-chain events
+├── onchain-event-handler/   # Cloud Function for processing webhooks
+└── discord-channel-manager/ # Discord channels and webhooks
 ```
-
-## Current Integrations
-
-- **Sentry**: Forwards application errors to project-specific Discord channels
-- **QuickNode Webhooks**: (Coming soon) For blockchain event monitoring
-
-> **Note on Monitoring Solutions:** We initially implemented Tenderly for blockchain event monitoring
-> but switched to QuickNode Webhooks due to Tenderly's alert pricing. The Tenderly integration
-> code is preserved in `terraform/tenderly-alerts-archived/` for potential future use.
 
 ## Prerequisites
 
-### Discord Setup
-
-1. **Discord Server**: With a category for alerts
-2. **Discord Bot**: Bot token with admin permissions
-
-### For Sentry Alerts
-
-1. **Sentry Account**: Organization with projects
-2. **Sentry API Token**: From Account Settings > Auth Tokens
-3. **Discord Integration**: [Install Sentry's Discord integration](https://docs.sentry.io/organization/integrations/notification-incidents/discord/)
-
-### For Blockchain Monitoring (Coming Soon)
-
-1. **QuickNode Account**: With webhook support
-2. **Contracts**: Safe multisigs to monitor
-
-### System Requirements
-
-- Terraform >= 1.10.0
+- **Terraform** >= 1.10.0
+- **GCP account** with billing enabled
+- **Discord bot** with admin permissions
+- **Sentry account** (for JS error monitoring)
+- **QuickNode account** (for blockchain monitoring)
 
 ## 🚀 Quick Start
 
 ### 1. Configure Variables
 
 ```bash
-cp terraform/terraform.tfvars.example terraform/terraform.tfvars
-# Fill in all values in terraform.tfvars
+cp terraform.tfvars.example terraform.tfvars
 ```
 
-Required variables:
+Edit `terraform.tfvars`:
 
 ```hcl
-# Discord
-discord_bot_token      = "your-bot-token"
-discord_server_id      = "your-server-id"
-discord_category_id    = "your-category-id"
+# Discord Configuration
+discord_bot_token      = "<your-discord-bot-token>"
+discord_server_id      = "<discord-server-id>"
+discord_category_id    = "<alert-category-id>"
+discord_sentry_role_id = "<sentry-role-id>"
+discord_server_name    = "<discord-server-name>"
 
-# Sentry
-sentry_auth_token      = "your-sentry-token"
-discord_sentry_role_id = "your-sentry-role-id"
+# Sentry Configuration
+sentry_auth_token      = "your-sentry-auth-token"
+sentry_organization_slug = "my-org"  # Optional, defaults to "mento-labs"
+sentry_team_slug       = "my-team"    # Optional, defaults to "mento-labs"
+
+# GCP Configuration
+project_name     = "alerts"              # Optional, defaults to "alerts"
+org_id           = "123456789012"        # Optional, omit if not using organization
+billing_account  = "XXXXXX-XXXXXX-XXXXXX"  # Required
+region           = "europe-west1"        # Optional, defaults to "europe-west1"
+
+# QuickNode Configuration
+quicknode_api_key        = "your-quicknode-api-key"
+quicknode_signing_secret = "your-signing-secret-at-least-32-chars"  # Generate: openssl rand -hex 32
+
+# Multisig Configuration
+multisigs = {
+  "mento-labs-celo" = {
+    name     = "Mento Labs Multisig (Celo)"
+    address  = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
+    chain    = "celo"
+    chain_id = 42220
+    network  = "celo-mainnet"
+  }
+}
+
+# Optional: Additional Labels
+additional_labels = {
+  environment = "production"
+  team        = "platform"
+  cost-center = "infrastructure"
+}
 ```
 
 ### 2. Initialize & Deploy
 
 ```bash
-cd terraform
 terraform init
 terraform plan
 terraform apply
 ```
 
+**Expected deployment time:** 5-10 minutes
+
+### 3. Verify Deployment
+
+```bash
+# Check outputs
+terraform output
+
+# Verify resources
+terraform state list
+
+# Test Cloud Function (should return 401 - signature required)
+curl -X POST $(terraform output -raw cloud_function_url)
+```
+
+## 📖 Usage Examples
+
+### Single-Chain Setup
+
+```hcl
+multisigs = {
+  "my-multisig" = {
+    name     = "My Multisig"
+    address  = "0x1234567890123456789012345678901234567890"
+    chain    = "celo"
+    chain_id = 42220
+    network  = "celo-mainnet"
+  }
+}
+```
+
+### Multi-Chain Setup
+
+The module automatically groups multisigs by chain and creates one QuickNode webhook per chain. A single Cloud Function handles webhooks from all chains.
+
+```hcl
+multisigs = {
+  "mento-labs-celo" = {
+    name     = "Mento Labs Multisig (Celo)"
+    address  = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
+    chain    = "celo"
+    chain_id = 42220
+    network  = "celo-mainnet"
+  }
+  "mento-labs-ethereum" = {
+    name     = "Mento Labs Multisig (Ethereum)"
+    address  = "0x1234567890123456789012345678901234567890"
+    chain    = "ethereum"
+    chain_id = 1
+    network  = "ethereum-mainnet"
+  }
+}
+```
+
+### Supported Chains
+
+- **Celo**: `chain_id = 42220`, `network = "celo-mainnet"`
+- **Ethereum**: `chain_id = 1`, `network = "ethereum-mainnet"`
+- **Base**: `chain_id = 8453`, `network = "base-mainnet"`
+- **Polygon**: `chain_id = 137`, `network = "polygon-mainnet"`
+- **Arbitrum**: `chain_id = 42161`, `network = "arbitrum-mainnet"`
+- **Optimism**: `chain_id = 10`, `network = "optimism-mainnet"`
+
 ## 📊 What Gets Created
 
-### Sentry Module (`sentry-alerts/`)
-
-**Purpose**: Monitor application errors
-
-**Creates**:
+### Sentry Module
 
 - Discord channels: `#sentry-{project-name}` for each Sentry project
 - Alert rules forwarding errors to Discord
 - Proper permissions for Sentry integration
 
-[Full Documentation →](terraform/sentry-alerts/README.md)
-
 ### Discord Monitoring Infrastructure
 
-**Purpose**: Shared Discord channels and webhooks for blockchain monitoring
+**Per multisig:**
 
-**Creates per multisig**:
+- `#🚨︱multisig-alerts-{name}` - Critical security events
+- `#🔔︱multisig-events-{name}` - Normal transaction events
+- Discord webhooks (automated creation)
 
-- **Discord Channels** (2 per Safe):
-  - `#🚨︱multisig-alerts-{name}` - Critical events like owner or threshold changes
-  - `#🔔︱multisig-events-{name}` - Normal transaction events
-- **Discord Webhooks**: Automated creation via REST API
+### Cloud Function
 
-**Note**: Currently used with QuickNode Webhooks. Archived Tenderly integration available in `tenderly-alerts-archived/`.
+- Processes QuickNode webhooks from all chains
+- Routes events to appropriate Discord channels
+- Validates webhook signatures
+
+### QuickNode Webhooks
+
+- One webhook per chain
+- Filters events by multisig addresses and event signatures
+- Sends filtered events to Cloud Function
 
 ## 🔧 Common Operations
 
-### Deploy Individual Modules
-
-```bash
-# Deploy only Sentry monitoring
-terraform apply -target=module.sentry_alerts
-
-# Deploy Discord infrastructure
-terraform apply -target=discord_text_channel.multisig_alerts -target=discord_text_channel.multisig_events -target=restapi_object.discord_webhook_alerts -target=restapi_object.discord_webhook_events
-```
-
 ### Add New Multisig
 
-Edit `terraform/terraform.tfvars`:
+Edit `terraform.tfvars`:
 
 ```hcl
 multisigs = {
   "existing-name" = { ... },
   "new-multisig" = {
-    name    = "New Multisig Name"
-    address = "0xYourAddress..."
+    name     = "New Multisig Name"
+    address  = "0xYourAddress..."
+    chain    = "celo"
+    chain_id = 42220
+    network  = "celo-mainnet"
   }
 }
 ```
 
-Then run:
+Then run `terraform apply`.
+
+### View Logs
 
 ```bash
-terraform apply
-```
-
-### View Current State
-
-```bash
-# List all resources
-terraform state list
-
-# Show outputs
-terraform output
-
-# Module-specific outputs
-terraform output -module=sentry_alerts
+FUNCTION_NAME=$(terraform output -json | jq -r '.function_name.value')
+PROJECT_ID=$(terraform output -raw project_id)
+gcloud functions logs read $FUNCTION_NAME --project=$PROJECT_ID --limit=50
 ```
 
 ### Destroy Resources
@@ -167,46 +214,98 @@ terraform destroy -target=module.sentry_alerts
 terraform destroy
 ```
 
+## 🐛 Troubleshooting
+
+### Discord Permission Errors
+
+Use the permission checker script:
+
+```bash
+cd scripts && npm install
+npx tsx scripts/check-discord-permissions.ts
+```
+
+**Common errors:**
+
+- `HTTP 403 Forbidden, code 50013` - Missing `MANAGE_CHANNELS` or `MANAGE_WEBHOOKS` permissions
+- `HTTP 403 Forbidden, code 50001` - Bot needs proper role permissions
+
+**Quick fix:** Grant bot `Administrator` permission in Discord Server Settings → Roles.
+
+### Invalid Address Format
+
+Addresses must:
+
+- Start with `0x`
+- Followed by exactly 40 hexadecimal characters
+- Example: `0x655133d8E90F8190ed5c1F0f3710F602800C0150`
+
+### Enable Debug Mode
+
+Add to `terraform.tfvars`:
+
+```hcl
+debug_mode = true
+```
+
+This shows REST API requests/responses for troubleshooting.
+
 ## 📚 Documentation
-
-### Architecture & Design
-
-- [`.cursor/ARCHITECTURE.mdc`](.cursor/ARCHITECTURE.mdc) - System design and module organization
 
 ### Module Documentation
 
-- [`terraform/sentry-alerts/README.md`](terraform/sentry-alerts/README.md) - Sentry module details
-- [`terraform/tenderly-alerts-archived/README.md`](terraform/tenderly-alerts-archived/README.md) - Archived Tenderly integration
-- [`terraform/safe-event-signatures.md`](terraform/safe-event-signatures.md) - Safe contract event reference
+- [`sentry-alerts/README.md`](sentry-alerts/README.md) - Sentry module details
+- [`discord-channel-manager/README.md`](discord-channel-manager/README.md) - Discord infrastructure module
+- [`onchain-event-listeners/README.md`](onchain-event-listeners/README.md) - QuickNode webhook module for on-chain events
+- [`onchain-event-handler/README.md`](onchain-event-handler/README.md) - Cloud Function module
+
+### Code Quality
+
+This repository follows [AWS Terraform best practices](https://docs.aws.amazon.com/prescriptive-guidance/latest/terraform-aws-provider-best-practices/structure.html) (adapted for GCP).
+
+**Key practices applied:**
+
+- **Standard structure**: All standard Terraform files with data sources organized in dedicated `data.tf` files
+- **Consistent formatting**: Output descriptions before values, proper variable descriptions, and naming conventions
+- **Default labels**: Comprehensive labeling pattern using `merge()` for extensibility (GCP equivalent of AWS tags)
+- **Documentation**: Comprehensive README files for all modules with inline usage examples
 
 ### External Documentation
 
-- [Terraform Documentation](https://www.terraform.io/docs)
+- [Terraform Documentation](https://developer.hashicorp.com/terraform/docs)
 - [Sentry API Docs](https://docs.sentry.io/api/)
 - [Discord Developer Docs](https://discord.com/developers/docs)
 - [QuickNode Documentation](https://www.quicknode.com/docs)
-
-## 🏗️ Module Independence
-
-Each module can be:
-
-- Deployed independently
-- Tested in isolation
-- Destroyed without affecting others
-- Modified without impacting other modules
 
 ## 🔒 Security
 
 - API keys stored in `terraform.tfvars` (gitignored)
 - Sensitive outputs marked appropriately
 - State file contains secrets - handle carefully
+- Webhook signatures validated for QuickNode requests
 
-## 🐛 Debugging
+## 💰 Cost Estimate
 
-Enable debug mode in `terraform.tfvars`:
+~$5-20/month per chain (Cloud Function + Storage)
 
-```hcl
-debug_mode = true
+---
+
+**Quick Commands Reference:**
+
+```bash
+# Initialization
+terraform init
+terraform plan
+terraform apply
+
+# Management
+terraform output
+terraform state list
+
+# Updates
+terraform plan
+terraform apply
+
+# Destruction
+terraform destroy
 ```
-
-This will show REST API requests/responses for troubleshooting.

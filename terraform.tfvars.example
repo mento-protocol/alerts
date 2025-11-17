@@ -1,0 +1,135 @@
+#####################
+# Sentry Configuration
+#####################
+
+# Sentry auth token (from https://sentry.io/settings/account/api/auth-tokens/)
+# Required scopes: project:read, project:write, team:read, org:read, alerts:write
+sentry_auth_token = "your-sentry-token"
+
+# Sentry organization slug (from URL: https://[slug].sentry.io)
+sentry_organization_slug = "mento-labs"
+
+# Sentry team slug
+sentry_team_slug = "mento-labs"
+
+#####################
+# Discord Configuration
+#####################
+
+# Discord bot token (from Discord Developer Portal)
+# Required permissions: Administrator
+discord_bot_token = "your-bot-token"
+
+# Discord server ID (right-click server with Developer Mode enabled and copy ID)
+# Must be a 17-20 digit snowflake ID
+discord_server_id = "1234567890123456789"
+
+# Discord server name as it appears in Sentry integrations
+discord_server_name = "Mento"
+
+# Discord category ID where alert channels will be created (right-click category and copy ID)
+# Must be a 17-20 digit snowflake ID
+discord_category_id = "1234567890123456789"
+
+# Discord role ID for the Sentry integration (right-click Sentry role and copy ID)
+# Must be a 17-20 digit snowflake ID
+discord_sentry_role_id = "1234567890123456789"
+
+#####################
+# Google Cloud Configuration
+#####################
+# The project-factory module will automatically create ONE GCP project
+# that handles alerts for ALL chains centrally
+# Module: https://github.com/terraform-google-modules/terraform-google-project-factory
+
+# Project name (project ID will be: {project_name}-{random-suffix})
+# Must be 6-30 characters, lowercase letters, numbers, and hyphens
+project_name = "mento-alerts"
+
+# GCP organization ID
+org_id = "123456789012"
+
+# Billing account ID (required)
+# Format: XXXXXX-XXXXXX-XXXXXX
+billing_account = "01ABCD-2EFGH3-4IJKL5"
+
+# Google Cloud region for resources
+region = "europe-west-1"
+
+#####################
+# QuickNode Configuration
+#####################
+
+# QuickNode API key for webhook creation (from QuickNode dashboard)
+# Get this from: https://dashboard.quicknode.com/api-keys
+quicknode_api_key = "your-quicknode-api-key"
+
+# Secret for verifying QuickNode webhook signatures
+# IMPORTANT: Generate a secure random string with at least 32 characters
+# Example generation: openssl rand -hex 32
+quicknode_signing_secret = "your-secure-random-secret-min-32-chars"
+
+# Note: Network configuration is now per-multisig (see below)
+
+#####################
+# Optional Settings
+#####################
+
+# Enable debug mode for REST API provider (shows API requests/responses)
+# Useful for troubleshooting Discord/QuickNode API issues
+# debug_mode = true
+
+#####################
+# Multisig Configuration
+#####################
+
+# Configure which Safe multisigs to monitor
+# Each multisig will get 2 Discord channels (alerts + events)
+# One QuickNode webhook is created per chain
+
+# IMPORTANT: Each multisig now includes chain information
+# This allows monitoring multisigs across multiple chains in a single deployment
+
+# Option 1: Use default multisigs (Mento Labs and Reserve on Celo)
+# The default configuration in variables.tf includes both
+
+# Option 2: Override with your own multisigs (uncomment and customize)
+# multisigs = {
+#   # Celo multisigs
+#   "mento-labs-celo" = {
+#     name     = "Mento Labs Multisig (Celo)"
+#     address  = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
+#     chain    = "celo"
+#     chain_id = 42220
+#     network  = "celo-mainnet"
+#   }
+#   "reserve-celo" = {
+#     name     = "Reserve Multisig (Celo)"
+#     address  = "0x87647780180B8f55980C7D3fFeFe08a9B29e9aE1"
+#     chain    = "celo"
+#     chain_id = 42220
+#     network  = "celo-mainnet"
+#   }
+#   
+#   # Ethereum multisigs (when you expand)
+#   # "mento-labs-ethereum" = {
+#   #   name     = "Mento Labs Multisig (Ethereum)"
+#   #   address  = "0xYourEthereumAddress..."
+#   #   chain    = "ethereum"
+#   #   chain_id = 1
+#   #   network  = "ethereum-mainnet"
+#   # }
+#   
+#   # Base multisigs (when you expand)
+#   # "treasury-base" = {
+#   #   name     = "Treasury Multisig (Base)"
+#   #   address  = "0xYourBaseAddress..."
+#   #   chain    = "base"
+#   #   chain_id = 8453
+#   #   network  = "base-mainnet"
+#   # }
+# }
+
+# Supported chains: celo, ethereum, base, polygon, arbitrum, optimism
+# Addresses must be valid Ethereum addresses (0x + 40 hex characters)
+# Network format: {chain}-{network} (e.g., "celo-mainnet", "ethereum-mainnet")

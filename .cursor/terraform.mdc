@@ -1,0 +1,8 @@
+---
+globs: *.tf
+alwaysApply: false
+---
+
+After making changes to terraform files, ALWAYS:
+- Run `trunk fmt && trunk check --fix` and fix any linter errors you caused
+- Run `terraform validate` to check if the config is valid
