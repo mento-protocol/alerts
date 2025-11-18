@@ -4,6 +4,7 @@
  * Multisig addresses are loaded from environment variables
  */
 
+import { celo, mainnet } from "viem/chains";
 import keccak from "keccak";
 import safeAbi from "../safe-abi.json";
 import { config } from "./config";
@@ -135,9 +136,82 @@ export const MULTISIGS: Record<MultisigAddress, MultisigKey> = (() => {
 })();
 
 /**
+ * Chain configuration mapping chain names to their properties
+ * Uses viem chain definitions where possible
+ */
+export interface ChainConfig {
+  blockExplorer: {
+    baseUrl: string;
+    tx: (hash: string) => string;
+    block: (number: string) => string;
+    address: (addr: string) => string;
+  };
+  nativeToken: {
+    symbol: string;
+    decimals: number;
+  };
+  rpcEndpoint: string;
+}
+
+/**
+ * Build block explorer helpers from viem chain blockExplorers
+ */
+function buildBlockExplorer(chain: typeof celo | typeof mainnet) {
+  const explorer = chain.blockExplorers?.default;
+  if (!explorer) {
+    throw new Error(
+      `Chain ${chain.name} does not have a default block explorer`,
+    );
+  }
+
+  return {
+    baseUrl: explorer.url,
+    tx: (hash: string) => `${explorer.url}/tx/${hash}`,
+    block: (number: string) => `${explorer.url}/block/${number}`,
+    address: (addr: string) => `${explorer.url}/address/${addr}`,
+  };
+}
+
+export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
+  celo: {
+    blockExplorer: buildBlockExplorer(celo),
+    nativeToken: {
+      symbol: celo.nativeCurrency.symbol,
+      decimals: celo.nativeCurrency.decimals,
+    },
+    rpcEndpoint: celo.rpcUrls.default.http[0] || "https://forno.celo.org",
+  },
+  ethereum: {
+    blockExplorer: buildBlockExplorer(mainnet),
+    nativeToken: {
+      symbol: mainnet.nativeCurrency.symbol,
+      decimals: mainnet.nativeCurrency.decimals,
+    },
+    rpcEndpoint: mainnet.rpcUrls.default.http[0] || "https://eth.llamarpc.com",
+  },
+} as const;
+
+/**
+ * Get chain configuration for a given chain name
+ */
+export function getChainConfig(chainName: string): ChainConfig | null {
+  return CHAIN_CONFIGS[chainName.toLowerCase()] || null;
+}
+
+/**
  * Color codes for Discord embeds
  */
 export const DISCORD_COLORS = {
   ALERT: 0xff4757, // Red for security events
   EVENT: 0x5f27cd, // Purple for operational events
 } as const;
+
+/**
+ * Discord webhook timeout in milliseconds (10 seconds)
+ */
+export const DISCORD_WEBHOOK_TIMEOUT_MS = 10000;
+
+/**
+ * Default token decimals (most EVM chains use 18)
+ */
+export const DEFAULT_TOKEN_DECIMALS = 18;

@@ -1,5 +1,7 @@
 import { Request, Response } from "@google-cloud/functions-framework";
 import { buildEventContext } from "./build-event-context";
+import { checkPayloadSize } from "./check-payload-size";
+import { handleHealthCheck } from "./health-check";
 import { processEvents } from "./process-events";
 import { validatePayload } from "./validate-payload";
 import { validateQuickNodeWebhook } from "./validate-quicknode-webhook";
@@ -11,42 +13,86 @@ export const processQuicknodeWebhook = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
+  // Handle health check requests
+  if (req.method === "GET") {
+    handleHealthCheck(res);
+    return;
+  }
+
   try {
-    // 1. Verify webhook signature (skip in local development)
+    // 1. Check payload size
+    const payloadSizeCheck = checkPayloadSize(req);
+    if (!payloadSizeCheck.valid) {
+      console.warn("Payload size exceeded", {
+        payloadSize: payloadSizeCheck.size,
+        maxSize: payloadSizeCheck.maxSize,
+      });
+      res.status(413).json({
+        error: "Payload Too Large",
+        message: `Payload size ${payloadSizeCheck.size} bytes exceeds maximum of ${payloadSizeCheck.maxSize} bytes`,
+      });
+      return;
+    }
+
+    // 2. Verify webhook signature (skip in local development)
     const isProduction = process.env.NODE_ENV !== "development";
 
     if (isProduction) {
       const requestValidation = validateQuickNodeWebhook(req);
       if (!requestValidation.valid) {
+        console.warn("Webhook validation failed", {
+          status: requestValidation.status,
+          message: requestValidation.message,
+        });
         res.status(requestValidation.status).send(requestValidation.message);
         return;
       }
     }
 
-    // 2. Validate payload structure
+    // 3. Validate payload structure
     const payloadValidation = validatePayload(req);
     if (!payloadValidation.valid) {
+      console.warn("Payload validation failed", {
+        status: payloadValidation.status,
+        error: payloadValidation.error,
+      });
       res.status(payloadValidation.status).json(payloadValidation.error);
       return;
     }
 
     const webhookData = payloadValidation.payload.result;
-    console.info(`Processing webhook with ${webhookData.length} logs`);
+    console.info("Processing webhook", {
+      logCount: webhookData.length,
+    });
 
-    // 3. Build context needed for processing
+    // 4. Build context needed for processing
     // We need this context BEFORE processing to correctly skip ExecutionSuccess duplicates
     const context = buildEventContext(webhookData);
 
-    // 4. Process events with complete context
+    // 5. Process events with complete context
     const results = await processEvents(webhookData, context);
 
-    // 5. Return success
+    console.info("Webhook processing completed", {
+      processed: results.length,
+      total: webhookData.length,
+    });
+
+    // 6. Return success
     res.status(200).json({
       processed: results.length,
       total: webhookData.length,
     });
   } catch (error) {
-    console.error("Webhook processing error:", error);
+    console.error("Webhook processing error", {
+      error:
+        error instanceof Error
+          ? {
+              name: error.name,
+              message: error.message,
+              stack: error.stack,
+            }
+          : String(error),
+    });
     res.status(500).send("Internal Server Error");
   }
 };

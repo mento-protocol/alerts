@@ -138,6 +138,42 @@ variable "multisigs" {
       chain                  = "ethereum"
       quicknode_network_name = "ethereum-mainnet"
     }
+    "mento-protocol-foundation-celo" = {
+      name                   = "Mento Protocol Foundation (Celo)"
+      address                = "0x3468D23A0B1aB3Ab9A537813166A8f7ff1947014"
+      chain                  = "celo"
+      quicknode_network_name = "celo-mainnet"
+    }
+    "mento-protocol-foundation-eth" = {
+      name                   = "Mento Protocol Foundation (Ethereum)"
+      address                = "0x3468D23A0B1aB3Ab9A537813166A8f7ff1947014"
+      chain                  = "ethereum"
+      quicknode_network_name = "ethereum-mainnet"
+    }
+    "reserve-eth" = {
+      name                   = "Reserve Multisig (Ethereum)"
+      address                = "0xd0697f70E79476195B742d5aFAb14BE50f98CC1E"
+      chain                  = "ethereum"
+      quicknode_network_name = "ethereum-mainnet"
+    }
+    "reserve-ops-celo" = {
+      name                   = "Reserve Ops Multisig (Celo)"
+      address                = "0xD3D2e5c5Af667DA817b2D752d86c8f40c22137E1"
+      chain                  = "celo"
+      quicknode_network_name = "celo-mainnet"
+    }
+    "reserve-ops-eth" = {
+      name                   = "Reserve Ops Multisig (Ethereum)"
+      address                = "0xD3D2e5c5Af667DA817b2D752d86c8f40c22137E1"
+      chain                  = "ethereum"
+      quicknode_network_name = "ethereum-mainnet"
+    }
+    "mento-watchdog-celo" = {
+      name                   = "Mento Watchdog (Celo)"
+      address                = "0xE6951C4176aaB41097C6f5fE11e9c515B7108acd"
+      chain                  = "celo"
+      quicknode_network_name = "celo-mainnet"
+    }
   }
 
   validation {
@@ -159,9 +195,9 @@ variable "multisigs" {
   validation {
     condition = alltrue([
       for k, v in var.multisigs :
-      contains(["celo", "ethereum", "base", "polygon", "arbitrum", "optimism"], v.chain)
+      contains(["celo", "ethereum"], v.chain)
     ])
-    error_message = "All multisigs must have a valid chain name: celo, ethereum, base, polygon, arbitrum, optimism."
+    error_message = "All multisigs must have a valid chain name: celo or ethereum."
   }
 
   validation {

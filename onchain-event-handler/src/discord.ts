@@ -3,11 +3,11 @@
  */
 
 import axios, { AxiosError } from "axios";
-import { DISCORD_COLORS } from "./constants";
+import { DISCORD_COLORS, DISCORD_WEBHOOK_TIMEOUT_MS } from "./constants";
 import type { DiscordMessage, QuickNodeDecodedLog } from "./types";
 import {
-  BLOCK_EXPLORER,
   decodeEventData,
+  getBlockExplorer,
   getMultisigChainInfo,
   getMultisigName,
   getSafeUiUrl,
@@ -47,10 +47,14 @@ export async function formatDiscordMessage(
       : txHashMap.get(log.transactionHash.toLowerCase()) || log.transactionHash;
   const safeUiUrl = getSafeUiUrl(log.address, txHashForSafe, multisigKey);
 
+  // Get chain-specific block explorer
+  const chainName = chainInfo?.chain || "celo"; // Fallback to celo
+  const blockExplorer = getBlockExplorer(chainName);
+
   const fields = [
     {
       name: "Transaction Hash",
-      value: `[${log.transactionHash}](${BLOCK_EXPLORER.tx(log.transactionHash)})`,
+      value: `[${log.transactionHash}](${blockExplorer.tx(log.transactionHash)})`,
       inline: false,
     },
     {
@@ -58,7 +62,7 @@ export async function formatDiscordMessage(
       value: `[Open TX in Safe UI](${safeUiUrl})`,
       inline: false,
     },
-    ...(await decodeEventData(eventName, log, txHashForSafe)),
+    ...(await decodeEventData(eventName, log, txHashForSafe, chainName)),
   ];
 
   // Build title: "Mento Labs Multisig [Celo]"
@@ -98,23 +102,33 @@ export async function sendToDiscord(
   try {
     await axios.post(webhookUrl, message, {
       headers: { "Content-Type": "application/json" },
-      timeout: 10000,
+      timeout: DISCORD_WEBHOOK_TIMEOUT_MS,
     });
 
     // Extract key info for logging
     const embed = message.embeds[0];
-    const description = embed.description; // Description is now "Event detected on Mento Labs Multisig on Celo"
+    const description = embed.description || "";
     const txField = embed.fields.find((f) => f.name === "Transaction Hash");
     const txHash = txField?.value.match(/\[([^\]]+)\]/)?.[1] || "unknown";
 
-    console.info(`Discord message sent: ${description} (tx: ${txHash})`);
+    console.info("Discord message sent", {
+      description,
+      transactionHash: txHash,
+    });
   } catch (error) {
     const axiosError = error as AxiosError;
-    console.error("Discord webhook error:", {
+    console.error("Discord webhook error", {
+      error:
+        axiosError instanceof Error
+          ? {
+              name: axiosError.name,
+              message: axiosError.message,
+              stack: axiosError.stack,
+            }
+          : String(axiosError),
       status: axiosError.response?.status,
       statusText: axiosError.response?.statusText,
       data: axiosError.response?.data,
-      message: axiosError.message,
     });
     throw error;
   }

@@ -50,87 +50,20 @@ resource "null_resource" "pause_webhook_before_update" {
       if [ -n "$WEBHOOK_ID" ] && [ "$WEBHOOK_ID" != "" ]; then
         echo "Pausing and deleting old webhook $WEBHOOK_ID to force recreation..."
         
-        # First pause the webhook (required before deletion)
-        HTTP_CODE=$(curl -s -o /tmp/webhook_response.json -w "%%{http_code}" -X PUT "https://api.quicknode.com/webhooks/rest/v1/webhooks/$WEBHOOK_ID" \
-          -H "x-api-key: ${var.quicknode_api_key}" \
-          -H "Content-Type: application/json" \
-          -H "accept: application/json" \
-          -d '{"status": "paused"}')
+        # Use reusable script for webhook management
+        SCRIPT_DIR="$$(cd "$$(dirname "$${BASH_SOURCE[0]}")/.." && pwd)"
+        "$${SCRIPT_DIR}/scripts/manage-quicknode-webhook.sh" pause-and-delete "$WEBHOOK_ID" "${var.quicknode_api_key}"
         
-        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
-          echo "Webhook paused successfully (HTTP $HTTP_CODE)"
-          
-          # Now delete the webhook
-          DELETE_CODE=$(curl -s -o /tmp/webhook_delete.json -w "%%{http_code}" -X DELETE "https://api.quicknode.com/webhooks/rest/v1/webhooks/$WEBHOOK_ID" \
-            -H "x-api-key: ${var.quicknode_api_key}" \
-            -H "accept: application/json")
-          
-          if [ "$DELETE_CODE" = "200" ] || [ "$DELETE_CODE" = "204" ]; then
-            echo "Old webhook deleted successfully (HTTP $DELETE_CODE)"
-            # Remove from Terraform state so Terraform will create instead of update
-            echo "Removing webhook from Terraform state..."
-            terraform state rm -lock=false "$STATE_PATH" 2>&1 | head -5
-            echo "Webhook removed from state - Terraform will create a new one"
-          else
-            DELETE_BODY=$(cat /tmp/webhook_delete.json 2>/dev/null || echo "No response body")
-            echo "Warning: Failed to delete webhook (HTTP $DELETE_CODE): $DELETE_BODY"
-          fi
-          rm -f /tmp/webhook_delete.json
-        else
-          BODY=$(cat /tmp/webhook_response.json 2>/dev/null || echo "No response body")
-          echo "Warning: Failed to pause webhook (HTTP $HTTP_CODE): $BODY"
-        fi
-        rm -f /tmp/webhook_response.json
+        # Remove from Terraform state so Terraform will create instead of update
+        echo "Removing webhook from Terraform state..."
+        terraform state rm -lock=false "$STATE_PATH" 2>&1 | head -5
+        echo "Webhook removed from state - Terraform will create a new one"
       else
         echo "Could not extract webhook ID from state, skipping delete"
       fi
     EOT
   }
 
-  # Also run on destroy to pause webhook before deletion
-  # Note: Uses QUICKNODE_API_KEY environment variable since destroy provisioners can't reference variables
-  # Get webhook ID from state (triggers don't include webhook_id to avoid circular dependency)
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<-EOT
-      # Get webhook ID from state
-      STATE_PATH=$(terraform state list | grep -E '\.multisig_webhook$' | grep -E 'onchain_event_listeners\[.*\]' | head -1)
-      WEBHOOK_ID=""
-      
-      if [ -n "$STATE_PATH" ]; then
-        WEBHOOK_ID=$(terraform state show "$STATE_PATH" 2>/dev/null | grep -E '^\s+id\s+=' | awk '{print $3}' | tr -d '"' || echo "")
-      fi
-      
-      if [ -n "$WEBHOOK_ID" ] && [ "$WEBHOOK_ID" != "" ] && [ "$WEBHOOK_ID" != "null" ]; then
-        echo "Pausing webhook $WEBHOOK_ID before deletion..."
-        
-        # Use environment variable for API key (must be set before terraform destroy)
-        API_KEY="$QUICKNODE_API_KEY"
-        if [ -z "$API_KEY" ] || [ "$API_KEY" = "" ]; then
-          echo "Warning: QUICKNODE_API_KEY environment variable not set, skipping pause"
-          echo "Set QUICKNODE_API_KEY environment variable before running terraform destroy"
-          exit 0
-        fi
-        
-        # Pause the webhook (required before deletion)
-        HTTP_CODE=$(curl -s -o /tmp/webhook_pause.json -w "%%{http_code}" -X PUT "https://api.quicknode.com/webhooks/rest/v1/webhooks/$WEBHOOK_ID" \
-          -H "x-api-key: $API_KEY" \
-          -H "Content-Type: application/json" \
-          -H "accept: application/json" \
-          -d '{"status": "paused"}')
-        
-        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
-          echo "Webhook paused successfully before deletion"
-        else
-          BODY=$(cat /tmp/webhook_pause.json 2>/dev/null || echo "No response body")
-          echo "Warning: Failed to pause webhook (HTTP $HTTP_CODE): $BODY"
-        fi
-        rm -f /tmp/webhook_pause.json
-      else
-        echo "Could not determine webhook ID, skipping pause (may already be deleted)"
-      fi
-    EOT
-  }
 }
 
 # QuickNode webhook creation
@@ -193,7 +126,8 @@ resource "restapi_object" "multisig_webhook" {
 # This allows the webhook to be paused before deletion
 resource "null_resource" "pause_webhook_on_destroy" {
   triggers = {
-    webhook_id = restapi_object.multisig_webhook.id
+    webhook_id  = restapi_object.multisig_webhook.id
+    script_path = "${path.root}/scripts/manage-quicknode-webhook.sh"
   }
 
   lifecycle {
@@ -205,38 +139,37 @@ resource "null_resource" "pause_webhook_on_destroy" {
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-      # Get webhook ID from triggers
       WEBHOOK_ID="${self.triggers.webhook_id}"
+      # Compute script path dynamically (works for both old and new resources)
+      # Find the project root by looking for scripts/manage-quicknode-webhook.sh
+      SCRIPT_PATH=""
+      CURRENT_DIR="$$(pwd)"
+      # Try to find script starting from current directory and going up
+      for dir in "$$CURRENT_DIR" "$$(dirname "$$CURRENT_DIR")" "$$(dirname "$$(dirname "$$CURRENT_DIR")")"; do
+        if [ -f "$$dir/scripts/manage-quicknode-webhook.sh" ]; then
+          SCRIPT_PATH="$$dir/scripts/manage-quicknode-webhook.sh"
+          break
+        fi
+      done
+
+      if [ -z "$$SCRIPT_PATH" ]; then
+        echo "Warning: Could not find manage-quicknode-webhook.sh script, skipping pause"
+        exit 0
+      fi
       
       if [ -n "$WEBHOOK_ID" ] && [ "$WEBHOOK_ID" != "" ] && [ "$WEBHOOK_ID" != "null" ]; then
         echo "Pausing webhook $WEBHOOK_ID before deletion..."
         
-        # Use environment variable for API key (must be set before terraform destroy)
         API_KEY="$QUICKNODE_API_KEY"
         if [ -z "$API_KEY" ] || [ "$API_KEY" = "" ]; then
           echo "Warning: QUICKNODE_API_KEY environment variable not set, skipping pause"
-          echo "Set QUICKNODE_API_KEY environment variable before running terraform destroy"
           exit 0
         fi
         
-        # Pause the webhook (required before deletion)
-        HTTP_CODE=$(curl -s -o /tmp/webhook_pause.json -w "%%{http_code}" -X PUT "https://api.quicknode.com/webhooks/rest/v1/webhooks/$WEBHOOK_ID" \
-          -H "x-api-key: $API_KEY" \
-          -H "Content-Type: application/json" \
-          -H "accept: application/json" \
-          -d '{"status": "paused"}')
-        
-        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
-          echo "Webhook paused successfully before deletion"
-        else
-          BODY=$(cat /tmp/webhook_pause.json 2>/dev/null || echo "No response body")
-          echo "Warning: Failed to pause webhook (HTTP $HTTP_CODE): $BODY"
-        fi
-        rm -f /tmp/webhook_pause.json
+        "$$SCRIPT_PATH" pause "$WEBHOOK_ID" "$API_KEY" || true
       else
         echo "Could not determine webhook ID, skipping pause"
       fi
     EOT
   }
 }
-

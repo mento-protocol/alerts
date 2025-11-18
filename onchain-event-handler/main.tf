@@ -166,18 +166,30 @@ resource "google_storage_bucket_object" "function_source" {
 }
 
 # Allows the Quicknode Webhook service (and everyone else...) to call the cloud function
-resource "google_cloud_run_v2_service_iam_member" "cloud_function_invoker" {
-  project  = var.project_id
-  location = var.region
-  name     = google_cloudfunctions2_function.onchain_event_handler.name
-  role     = "roles/run.invoker"
+# Cloud Functions Gen2 requires IAM bindings on both the function and the underlying Cloud Run service
+# trunk-ignore(checkov/CKV_GCP_107): Quicknode needs to be able to call the function, plus we're doing signature verification in the function code
+resource "google_cloudfunctions2_function_iam_member" "cloud_function_invoker" {
+  project        = var.project_id
+  location       = var.region
+  cloud_function = google_cloudfunctions2_function.onchain_event_handler.name
+  role           = "roles/cloudfunctions.invoker"
   # We could probably somehow whitelist the Quicknode Webhook URL or their IP range here instead of allowing everyone to call it,
   # but given the limited damage potential of calling this function it doesn't seem worth the extra effort.
-  # Also, we do verify the signature of the webhook request in the function, so we're not really worried about malicious actors.
   member = "allUsers"
 
   # Explicitly depend on the function to ensure IAM binding is applied after function creation
   # This prevents 403 errors when the function is recreated
+  depends_on = [google_cloudfunctions2_function.onchain_event_handler]
+}
+
+# Also set IAM on the underlying Cloud Run service (required for Cloud Functions Gen2)
+resource "google_cloud_run_v2_service_iam_member" "cloud_run_invoker" {
+  project  = var.project_id
+  location = var.region
+  name     = google_cloudfunctions2_function.onchain_event_handler.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+
   depends_on = [google_cloudfunctions2_function.onchain_event_handler]
 }
 

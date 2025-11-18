@@ -1,0 +1,9 @@
+---
+alwaysApply: true
+---
+
+After every TypeScript change, make sure that:
+1. TypeScript compiles ok (`npm run tsc`)
+2. Tests are still passing (`npm test`)
+3. Formatting is ok (`trunk fmt`)
+4. All linters are passing (`trunk check`)

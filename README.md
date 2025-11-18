@@ -16,6 +16,36 @@ Terraform-managed alert infrastructure for monitoring Mento's infrastructure acr
 └── discord-channel-manager/ # Discord channels and webhooks
 ```
 
+## 🏗️ Architecture
+
+### Data Flow
+
+```mermaid
+graph LR
+    A[Blockchain<br/>Celo/Ethereum] -->|Events emitted| B[QuickNode<br/>Webhooks]
+    B -->|HTTP POST<br/>signed| C[Cloud Function<br/>onchain-event-handler]
+    C -->|1. Verify signature| C
+    C -->|2. Validate payload| C
+    C -->|3. Process events| C
+    C -->|4. Format messages| C
+    C -->|HTTP POST| D[Discord<br/>Webhooks]
+    D -->|Messages| E[Discord Channels<br/>alerts/events]
+```
+
+### Component Overview
+
+1. **QuickNode Webhooks**: Monitor blockchain events for configured multisig addresses
+2. **Cloud Function**: Processes webhooks, verifies signatures, formats messages
+3. **Discord Channels**: Receives formatted alerts and event notifications
+4. **Terraform**: Manages all infrastructure as code
+
+### Security
+
+- **Signature Verification**: All QuickNode webhooks are verified using HMAC-SHA256
+- **Timestamp Validation**: Prevents replay attacks (5-minute window)
+- **Payload Size Limits**: Maximum 10MB payload size
+- **Secret Management**: Secrets stored in GCP Secret Manager
+
 ## Prerequisites
 
 - **Terraform** >= 1.10.0
@@ -138,10 +168,6 @@ multisigs = {
 
 - **Celo**: `chain = "celo"`, `quicknode_network_name = "celo-mainnet"`
 - **Ethereum**: `chain = "ethereum"`, `quicknode_network_name = "ethereum-mainnet"`
-- **Base**: `chain = "base"`, `quicknode_network_name = "base-mainnet"`
-- **Polygon**: `chain = "polygon"`, `quicknode_network_name = "polygon-mainnet"`
-- **Arbitrum**: `chain = "arbitrum"`, `quicknode_network_name = "arbitrum-mainnet"`
-- **Optimism**: `chain = "optimism"`, `quicknode_network_name = "optimism-mainnet"`
 
 **Note:** `quicknode_network_name` must be a valid QuickNode network identifier. See QuickNode API documentation for the full list of supported networks.
 

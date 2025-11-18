@@ -34,3 +34,26 @@ jobs:
 
       - name: Trunk Code Quality
         uses: trunk-io/trunk-action@v1
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # For repo checkout
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install test dependencies
+        working-directory: onchain-event-handler
+        run: npm ci
+
+      - name: Run tests
+        working-directory: onchain-event-handler
+        run: npm test

@@ -10,7 +10,10 @@
     "build": "rimraf dist && tsc",
     "start": "NODE_ENV=development functions-framework --target=processQuicknodeWebhook",
     "prestart": "npm run build",
-    "test": "npm run test:local",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:local": "./scripts/test-local.sh",
     "dev": "nodemon --ext ts --ignore dist --exec \"npm run start\"",
     "deploy": "./scripts/deploy.sh",
     "logs": "./scripts/get-function-logs.sh",
@@ -18,30 +21,30 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,js,json}\"",
-    "generate:env": "terraform -chdir=.. apply -target=module.onchain_event_handler.local_file.env_file",
-    "test:local": "./scripts/test-local.sh"
+    "generate:env": "terraform -chdir=.. apply -target=module.onchain_event_handler.local_file.env_file"
   },
   "dependencies": {
-    "@google-cloud/functions-framework": "^3.3.0",
-    "axios": "^1.7.9",
+    "@google-cloud/functions-framework": "^4.0.0",
+    "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "env-schema": "^7.0.0",
     "keccak": "^3.0.4",
-    "viem": "^2.39.0"
+    "viem": "^2.39.2"
   },
   "devDependencies": {
-    "@eslint/js": "^9.18.0",
+    "@eslint/js": "^9.39.1",
     "@types/keccak": "^3.0.5",
-    "@types/node": "^22.10.5",
-    "@typescript-eslint/eslint-plugin": "^8.18.2",
-    "@typescript-eslint/parser": "^8.18.2",
-    "eslint": "^9.18.0",
+    "@types/node": "^24.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.46.4",
+    "@typescript-eslint/parser": "^8.46.4",
+    "@vitest/coverage-v8": "^4.0.10",
+    "eslint": "^9.39.1",
     "nodemon": "^3.1.11",
     "prettier": "^3.6.2",
     "rimraf": "^6.1.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.2",
-    "typescript-eslint": "^8.18.2"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.10"
   },
   "overrides": {
     "js-yaml": "^4.1.1"

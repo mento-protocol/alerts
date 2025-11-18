@@ -23,7 +23,6 @@ lint:
     - eslint@9.39.1
     - git-diff-check
     - gitleaks@8.29.0
-    - markdown-link-check@3.14.1
     - markdownlint@0.45.0
     - osv-scanner@2.2.4
     - pre-commit-hooks@5.0.0
@@ -45,11 +44,6 @@ lint:
         - discord-channel-manager/main.tf
         - onchain-event-handler/main.tf
         - onchain-event-listeners/main.tf
-    - linters: [markdown-link-check]
-      paths:
-        # External links that may require authentication or have rate limiting
-        - safe-event-signatures.md
-        - tenderly-alerts-archived/module/safe-event-signatures.md
 
 actions:
   enabled:

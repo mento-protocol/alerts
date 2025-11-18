@@ -16,83 +16,144 @@ export async function processEvents(
   context: EventContext,
 ): Promise<ProcessedEvent[]> {
   const { txHashMap, hasSafeMultiSigTx } = context;
-  const results: ProcessedEvent[] = [];
 
-  for (const log of logs) {
-    try {
-      // Skip ExecutionSuccess if we already have SafeMultiSigTransaction for this tx
-      if (
-        log.name === "ExecutionSuccess" &&
-        hasSafeMultiSigTx.has(log.transactionHash.toLowerCase())
-      ) {
-        console.info(
-          `Skipping ExecutionSuccess notification (SafeMultiSigTransaction already sent for tx ${log.transactionHash})`,
-        );
-        continue;
-      }
-
-      const result = await processEvent(log, txHashMap);
-      if (result) {
-        results.push(result);
-      }
-    } catch (error) {
-      console.error("Error processing log:", error);
-      // Continue processing other logs
+  // Filter out logs that should be skipped before parallel processing
+  const logsToProcess = logs.filter((logEntry) => {
+    // Skip ExecutionSuccess if we already have SafeMultiSigTransaction for this tx
+    if (
+      logEntry.name === "ExecutionSuccess" &&
+      hasSafeMultiSigTx.has(logEntry.transactionHash.toLowerCase())
+    ) {
+      console.info("Skipping ExecutionSuccess notification", {
+        reason: "SafeMultiSigTransaction already sent",
+        transactionHash: logEntry.transactionHash,
+      });
+      return false;
     }
+    return true;
+  });
+
+  // Process all events in parallel
+  const results = await Promise.all(
+    logsToProcess.map(async (logEntry) => {
+      try {
+        return await processEvent(logEntry, txHashMap);
+      } catch (error) {
+        console.error("Error processing log", {
+          error:
+            error instanceof Error
+              ? {
+                  name: error.name,
+                  message: error.message,
+                  stack: error.stack,
+                }
+              : String(error),
+          transactionHash: logEntry.transactionHash,
+          eventName: logEntry.name,
+        });
+        // Return null for failed events
+        return null;
+      }
+    }),
+  );
+
+  // Filter out null results (failed events)
+  return results.filter((result): result is ProcessedEvent => result !== null);
+}
+
+/**
+ * Validate required fields in a log entry
+ */
+function validateLog(log: QuickNodeWebhookPayload["result"][0]): {
+  valid: boolean;
+  error?: string;
+} {
+  if (!log.address || typeof log.address !== "string") {
+    return { valid: false, error: "Log missing or invalid address field" };
   }
 
-  return results;
+  if (!log.name || typeof log.name !== "string") {
+    return { valid: false, error: "Log missing or invalid name field" };
+  }
+
+  if (!log.transactionHash || typeof log.transactionHash !== "string") {
+    return {
+      valid: false,
+      error: "Log missing or invalid transactionHash field",
+    };
+  }
+
+  return { valid: true };
 }
 
 /**
  * Process a single event log and send to Discord
  *
- * @param log - The decoded log entry from QuickNode webhook
+ * @param logEntry - The decoded log entry from QuickNode webhook
  * @param txHashMap - Map of transactionHash -> Safe txHash for linking transactions
  * @returns ProcessedEvent if successful, null if event should be skipped
  */
 async function processEvent(
-  log: QuickNodeWebhookPayload["result"][0],
+  logEntry: QuickNodeWebhookPayload["result"][0],
   txHashMap: Map<string, string>,
 ): Promise<ProcessedEvent | null> {
-  // 1. Get event name from decoded log
-  const eventName = log.name;
-
-  if (!eventName) {
-    console.warn(`Log missing event name:`, log);
+  // 1. Validate required fields
+  const validation = validateLog(logEntry);
+  if (!validation.valid) {
+    console.warn("Invalid log entry", {
+      error: validation.error,
+      address: logEntry.address,
+      name: logEntry.name,
+      transactionHash: logEntry.transactionHash,
+    });
     return null;
   }
 
-  // 2. Identify multisig
-  const multisigAddress = log.address.toLowerCase();
+  // 2. Get event name from decoded log
+  const eventName = logEntry.name!;
+
+  // 3. Identify multisig
+  const multisigAddress = logEntry.address!.toLowerCase();
   const multisigKey = getMultisigKey(multisigAddress);
 
   if (!multisigKey) {
-    console.warn(`Unknown multisig address: ${multisigAddress}`);
+    console.warn("Unknown multisig address", {
+      address: multisigAddress,
+    });
     return null;
   }
 
-  // 3. Determine channel (alerts vs events)
+  // 4. Determine channel (alerts vs events)
   const isSecurity = isSecurityEvent(eventName);
   const channelType = isSecurity ? "alerts" : "events";
 
-  // 4. Get webhook URL
+  // 5. Get webhook URL
   const webhookUrl = getWebhookUrl(multisigKey, channelType);
   if (!webhookUrl) {
-    console.error(`No webhook URL for ${multisigKey} ${channelType}`);
+    console.error("No webhook URL found", {
+      multisigKey,
+      channelType,
+    });
     return null;
   }
 
-  // 5. Format Discord message
+  // 6. Format Discord message
   const discordMessage = await formatDiscordMessage(
     eventName,
-    log,
+    logEntry,
     multisigKey,
     txHashMap,
   );
 
-  // 6. Send to Discord
+  // 7. Send to Discord
   await sendToDiscord(webhookUrl, discordMessage);
+
+  console.info("Event processed successfully", {
+    multisigKey,
+    eventName,
+    channelType,
+    transactionHash: logEntry.transactionHash,
+  });
 
   return { multisigKey, eventName, channelType };
 }

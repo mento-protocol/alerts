@@ -5,7 +5,6 @@ export interface Env {
   DISCORD_WEBHOOK_EVENTS: string;
   MULTISIG_CONFIG: string;
   QUICKNODE_SIGNING_SECRET: string;
-  X_AUTH_TOKEN_SECRET_ID: string;
 }
 
 const schema: JSONSchemaType<Env> = {
@@ -21,7 +20,6 @@ const schema: JSONSchemaType<Env> = {
     DISCORD_WEBHOOK_EVENTS: { type: "string" },
     MULTISIG_CONFIG: { type: "string" },
     QUICKNODE_SIGNING_SECRET: { type: "string" },
-    X_AUTH_TOKEN_SECRET_ID: { type: "string" },
   },
 };
 

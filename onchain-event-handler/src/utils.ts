@@ -3,20 +3,24 @@
  */
 
 import { createPublicClient, http, recoverAddress } from "viem";
-import { celo } from "viem/chains";
+import { celo, mainnet } from "viem/chains";
 import config from "./config";
-import { EVENT_SIGNATURES, MULTISIGS, SECURITY_EVENTS } from "./constants";
+import {
+  DEFAULT_TOKEN_DECIMALS,
+  EVENT_SIGNATURES,
+  MULTISIGS,
+  SECURITY_EVENTS,
+  getChainConfig,
+} from "./constants";
 import type { DiscordEmbedField, QuickNodeDecodedLog } from "./types";
 
 /**
- * Block explorer configuration for Celo network
+ * Map chain names to viem chain objects
  */
-export const BLOCK_EXPLORER = {
-  BASE_URL: "https://celoscan.io",
-  tx: (hash: string) => `https://celoscan.io/tx/${hash}`,
-  block: (number: string) => `https://celoscan.io/block/${number}`,
-  address: (addr: string) => `https://celoscan.io/address/${addr}`,
-} as const;
+const VIEM_CHAINS: Record<string, typeof celo | typeof mainnet> = {
+  celo,
+  ethereum: mainnet,
+};
 
 /**
  * Get event name from log topic0
@@ -77,7 +81,7 @@ export function getWebhookUrl(
  * @param txHash - Safe transaction hash (EIP-712 hash) that was signed
  * @returns Array of signer addresses
  */
-async function extractSignersFromSignatures(
+export async function extractSignersFromSignatures(
   signatures: string,
   txHash: string,
 ): Promise<string[]> {
@@ -158,6 +162,7 @@ async function extractSignersFromSignatures(
           signers.push(recoveredAddress.toLowerCase());
         } catch (error) {
           // If recovery fails, skip this signature
+          // Note: Using console.warn here as this is a utility function without logger context
           console.warn(
             `Failed to recover address from signature at offset ${i}:`,
             error,
@@ -165,6 +170,7 @@ async function extractSignersFromSignatures(
         }
       } else {
         // Unknown v value, skip this signature
+        // Note: Using console.warn here as this is a utility function without logger context
         console.warn(
           `Unknown v value ${vByte} at offset ${i}, skipping signature`,
         );
@@ -174,6 +180,7 @@ async function extractSignersFromSignatures(
       i += 130;
     }
   } catch (error) {
+    // Note: Using console.warn here as this is a utility function without logger context
     console.warn("Failed to extract signers from signatures:", error);
   }
 
@@ -181,211 +188,48 @@ async function extractSignersFromSignatures(
 }
 
 /**
- * Extract event data from decoded log
- * Extracts relevant information from decoded log parameters based on the Safe event type
+ * Extract event data from decoded log using registry pattern
  * @param eventName - The Safe event name (e.g., "AddedOwner", "ExecutionSuccess")
  * @param log - QuickNode decoded log entry containing decoded event parameters
  * @param txHash - Optional Safe transaction hash for extracting signers
+ * @param chainName - Chain name (e.g., "celo", "ethereum") for chain-specific formatting
  * @returns Array of Discord embed fields with event parameters
  */
 export async function decodeEventData(
   eventName: string,
   log: QuickNodeDecodedLog,
   txHash?: string,
+  chainName: string = "celo",
 ): Promise<DiscordEmbedField[]> {
-  const fields: DiscordEmbedField[] = [];
+  const chainConfig = getChainConfig(chainName);
+  const chainTokenConfig = {
+    decimals: chainConfig?.nativeToken.decimals || DEFAULT_TOKEN_DECIMALS,
+    symbol: chainConfig?.nativeToken.symbol || "",
+  };
 
-  switch (eventName) {
-    case "AddedOwner":
-    case "RemovedOwner":
-      if (log.owner && typeof log.owner === "string") {
-        fields.push({
-          name: "Owner",
-          value: log.owner,
-          inline: false,
-        });
-      }
-      break;
+  // Use registry pattern to get formatter
+  const { getEventFormatter } = await import("./event-formatters");
+  const formatter = getEventFormatter(eventName);
 
-    case "ChangedThreshold":
-      if (log.threshold !== undefined) {
-        const threshold =
-          typeof log.threshold === "string"
-            ? parseInt(log.threshold, 10)
-            : Number(log.threshold);
-        fields.push({
-          name: "New Threshold",
-          value: threshold.toString(),
-          inline: false,
-        });
-      }
-      break;
+  if (formatter) {
+    // Special handling for SafeMultiSigTransaction which needs chainName
+    if (eventName === "SafeMultiSigTransaction") {
+      const { formatSafeMultiSigTransactionEvent } = await import(
+        "./event-formatters/transaction-formatters"
+      );
+      return formatSafeMultiSigTransactionEvent(
+        log,
+        chainTokenConfig,
+        chainName,
+        txHash,
+      );
+    }
 
-    case "ChangedFallbackHandler":
-      if (log.handler && typeof log.handler === "string") {
-        fields.push({
-          name: "Fallback Handler",
-          value: log.handler,
-          inline: false,
-        });
-      }
-      break;
-
-    case "EnabledModule":
-    case "DisabledModule":
-      if (log.module && typeof log.module === "string") {
-        fields.push({
-          name: "Module",
-          value: log.module,
-          inline: false,
-        });
-      }
-      break;
-
-    case "ChangedGuard":
-      if (log.guard && typeof log.guard === "string") {
-        fields.push({
-          name: "Guard",
-          value: log.guard,
-          inline: false,
-        });
-      }
-      break;
-
-    case "ExecutionSuccess":
-    case "ExecutionFailure":
-      if (log.payment !== undefined) {
-        try {
-          const payment =
-            typeof log.payment === "string"
-              ? BigInt(log.payment)
-              : BigInt(Number(log.payment));
-          const paymentInCelo = Number(payment) / 1e18;
-          if (paymentInCelo > 0) {
-            fields.push({
-              name: "Payment",
-              value: `${paymentInCelo.toFixed(6)} CELO`,
-              inline: false,
-            });
-          }
-        } catch {
-          // Ignore parsing errors
-        }
-      }
-      break;
-
-    case "ApproveHash":
-      if (log.hash && typeof log.hash === "string") {
-        fields.push({
-          name: "Hash",
-          value: log.hash,
-          inline: false,
-        });
-      }
-      if (log.owner && typeof log.owner === "string") {
-        fields.push({
-          name: "Owner",
-          value: log.owner,
-          inline: false,
-        });
-      }
-      break;
-
-    case "SignMsg":
-      if (log.msgHash && typeof log.msgHash === "string") {
-        fields.push({
-          name: "Message Hash",
-          value: log.msgHash,
-          inline: false,
-        });
-      }
-      break;
-
-    case "SafeReceived":
-      if (log.sender && typeof log.sender === "string") {
-        fields.push({
-          name: "Sender",
-          value: log.sender,
-          inline: false,
-        });
-      }
-      if (log.value !== undefined) {
-        try {
-          const value =
-            typeof log.value === "string"
-              ? BigInt(log.value)
-              : BigInt(Number(log.value));
-          const valueInCelo = Number(value) / 1e18;
-          fields.push({
-            name: "Value",
-            value: `${valueInCelo.toFixed(6)} CELO`,
-            inline: false,
-          });
-        } catch {
-          // Ignore parsing errors
-        }
-      }
-      break;
-
-    case "SafeMultiSigTransaction":
-      // This is a custom event from QuickNode, include relevant fields
-      if (log.to && typeof log.to === "string") {
-        fields.push({
-          name: "To",
-          value: `[${log.to}](${BLOCK_EXPLORER.address(log.to)})`,
-          inline: false,
-        });
-      }
-      if (log.value && typeof log.value === "string") {
-        try {
-          const value = BigInt(log.value);
-          const valueInCelo = Number(value) / 1e18;
-          if (valueInCelo > 0) {
-            fields.push({
-              name: "Value",
-              value: `${valueInCelo.toFixed(6)} CELO`,
-              inline: false,
-            });
-          }
-        } catch {
-          // Ignore parsing errors
-        }
-      }
-      // Extract signers from signatures if txHash is available
-      if (txHash && log.signatures && typeof log.signatures === "string") {
-        const signers = await extractSignersFromSignatures(
-          log.signatures,
-          txHash,
-        );
-        if (signers.length > 0) {
-          const signerLinks = signers
-            .map(
-              (addr) =>
-                `[${addr.slice(0, 6)}...${addr.slice(-4)}](${BLOCK_EXPLORER.address(addr)})`,
-            )
-            .join(", ");
-          fields.push({
-            name: "Signers",
-            value: signerLinks,
-            inline: true,
-          });
-        }
-      }
-      // Get executor address (who actually executed the transaction)
-      if (log.transactionHash && typeof log.transactionHash === "string") {
-        const executor = await getTransactionExecutor(log.transactionHash);
-        if (executor) {
-          fields.push({
-            name: "Executed by",
-            value: `[${executor.slice(0, 6)}...${executor.slice(-4)}](${BLOCK_EXPLORER.address(executor)})`,
-            inline: true,
-          });
-        }
-      }
-      break;
+    return formatter(log, chainTokenConfig, txHash);
   }
 
-  return fields;
+  // Fallback: return empty fields for unknown events
+  return [];
 }
 
 /**
@@ -398,17 +242,29 @@ export function formatTxHash(hash: string): string {
 /**
  * Get the executor address (from) of a transaction
  * @param transactionHash - The transaction hash to look up
+ * @param chainName - The chain name (e.g., "celo", "ethereum")
  * @returns The executor address, or null if not found/error
  */
-async function getTransactionExecutor(
+export async function getTransactionExecutor(
   transactionHash: string,
+  chainName: string,
 ): Promise<string | null> {
   try {
-    // Use public Celo RPC endpoint
-    // In production, you might want to use QuickNode's RPC endpoint if available
+    const chainConfig = getChainConfig(chainName);
+    if (!chainConfig) {
+      console.warn(`Unknown chain: ${chainName}`);
+      return null;
+    }
+
+    const viemChain = VIEM_CHAINS[chainName.toLowerCase()];
+    if (!viemChain) {
+      console.warn(`No viem chain config for: ${chainName}`);
+      return null;
+    }
+
     const publicClient = createPublicClient({
-      chain: celo,
-      transport: http("https://forno.celo.org"),
+      chain: viemChain,
+      transport: http(chainConfig.rpcEndpoint),
     });
 
     const tx = await publicClient.getTransaction({
@@ -417,6 +273,7 @@ async function getTransactionExecutor(
 
     return tx.from.toLowerCase();
   } catch (error) {
+    // Note: Using console.warn here as this is a utility function without logger context
     console.warn(
       `Failed to fetch transaction executor for ${transactionHash}:`,
       error,
@@ -426,14 +283,24 @@ async function getTransactionExecutor(
 }
 
 /**
- * Get multisig display name
+ * Get multisig display name from MULTISIG_CONFIG
  */
 export function getMultisigName(multisigKey: string): string {
-  const names: Record<string, string> = {
-    "mento-labs": "Mento Labs Multisig",
-    reserve: "Reserve Multisig",
-  };
-  return names[multisigKey] || multisigKey;
+  try {
+    const multisigConfigJson = config.MULTISIG_CONFIG;
+    const multisigConfig = JSON.parse(multisigConfigJson) as Record<
+      string,
+      { address: string; name: string; chain: string }
+    >;
+
+    const multisigInfo = multisigConfig[multisigKey];
+    if (multisigInfo?.name) {
+      return multisigInfo.name;
+    }
+  } catch {
+    // Fallback if config parsing fails
+  }
+  return multisigKey;
 }
 
 /**
@@ -460,6 +327,24 @@ export function getMultisigChainInfo(multisigKey: string): {
   } catch {
     return null;
   }
+}
+
+/**
+ * Get block explorer for a given chain
+ */
+export function getBlockExplorer(chainName: string) {
+  const chainConfig = getChainConfig(chainName);
+  if (!chainConfig) {
+    // Fallback to Celo if chain not found
+    const celoConfig = getChainConfig("celo");
+    if (!celoConfig) {
+      throw new Error(
+        `Chain config not found for: ${chainName} and fallback celo also not found`,
+      );
+    }
+    return celoConfig.blockExplorer;
+  }
+  return chainConfig.blockExplorer;
 }
 
 /**

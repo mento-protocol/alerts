@@ -99,7 +99,7 @@ provider "restapi" {
 
 **Required:**
 
-- QuickNode API key from: <https://dashboard.quicknode.com/api-keys>
+- QuickNode API key from: [dashboard.quicknode.com/api-keys](https://dashboard.quicknode.com/api-keys)
 
 ## Architecture
 

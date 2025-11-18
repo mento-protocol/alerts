@@ -32,14 +32,11 @@ export function validateQuickNodeWebhook(req: Request): ValidationResult {
 
   // Validate required headers are present
   if (!nonce || !timestamp || !signature) {
-    console.error("Missing required QuickNode headers", {
+    console.warn("Missing required QuickNode headers", {
       headers: Object.keys(req.headers),
       hasNonce: !!nonce,
       hasTimestamp: !!timestamp,
       hasSignature: !!signature,
-      xQnNonce: req.headers["x-qn-nonce"],
-      xQnTimestamp: req.headers["x-qn-timestamp"],
-      xQnSignature: req.headers["x-qn-signature"],
     });
     return {
       valid: false,
@@ -72,8 +69,6 @@ export function validateQuickNodeWebhook(req: Request): ValidationResult {
       hasSignature: !!signature,
       signatureLength: signature?.length,
       secretLength: secret?.length,
-      secretPreview: secret.substring(0, 10) + "...",
-      signaturePreview: signature.substring(0, 20) + "...",
       payloadLength: payload.length,
       payloadPreview: payload.substring(0, 200),
       usingRawBody: !!rawBody,
