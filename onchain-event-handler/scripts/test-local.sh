@@ -1,9 +1,38 @@
 #!/bin/bash
-set -e
-set -o pipefail
+#
+# Local Cloud Function Test Script
+#
+# Purpose:
+#   Sends a test payload to a locally running Cloud Function instance.
+#   Useful for testing function logic before deploying to GCP.
+#
+# Usage:
+#   ./scripts/test-local.sh
+#
+# Prerequisites:
+#   - Cloud Function must be running locally (e.g., via `npm start`)
+#   - Function should be listening on http://localhost:8080/ (default)
+#   - test-payload.json must exist in scripts directory
+#
+# Requirements:
+#   - curl installed
+#
+# Environment Variables:
+#   - FUNCTION_URL: Override default URL (default: http://localhost:8080/)
+#
+# What it does:
+#   1. Checks for test-payload.json file
+#   2. Sends POST request to local function URL
+#   3. Displays HTTP status code and response
+#
+# Example:
+#   # Start function locally in another terminal
+#   cd onchain-event-handler && npm start
+#
+#   # In another terminal, run test
+#   ./scripts/test-local.sh
 
-# Script to send a test payload to the local cloud function
-# Usage: ./scripts/test-local.sh
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"

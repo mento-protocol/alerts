@@ -69,7 +69,7 @@ quicknode_api_key = "your-quicknode-api-key"
 # Example generation: openssl rand -hex 32
 quicknode_signing_secret = "your-secure-random-secret-min-32-chars"
 
-# Note: Network configuration is now per-multisig (see below)
+# Note: QuickNode network configuration is now per-multisig (see below)
 
 #####################
 # Optional Settings
@@ -78,58 +78,3 @@ quicknode_signing_secret = "your-secure-random-secret-min-32-chars"
 # Enable debug mode for REST API provider (shows API requests/responses)
 # Useful for troubleshooting Discord/QuickNode API issues
 # debug_mode = true
-
-#####################
-# Multisig Configuration
-#####################
-
-# Configure which Safe multisigs to monitor
-# Each multisig will get 2 Discord channels (alerts + events)
-# One QuickNode webhook is created per chain
-
-# IMPORTANT: Each multisig now includes chain information
-# This allows monitoring multisigs across multiple chains in a single deployment
-
-# Option 1: Use default multisigs (Mento Labs and Reserve on Celo)
-# The default configuration in variables.tf includes both
-
-# Option 2: Override with your own multisigs (uncomment and customize)
-# multisigs = {
-#   # Celo multisigs
-#   "mento-labs-celo" = {
-#     name     = "Mento Labs Multisig (Celo)"
-#     address  = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
-#     chain    = "celo"
-#     chain_id = 42220
-#     network  = "celo-mainnet"
-#   }
-#   "reserve-celo" = {
-#     name     = "Reserve Multisig (Celo)"
-#     address  = "0x87647780180B8f55980C7D3fFeFe08a9B29e9aE1"
-#     chain    = "celo"
-#     chain_id = 42220
-#     network  = "celo-mainnet"
-#   }
-#   
-#   # Ethereum multisigs (when you expand)
-#   # "mento-labs-ethereum" = {
-#   #   name     = "Mento Labs Multisig (Ethereum)"
-#   #   address  = "0xYourEthereumAddress..."
-#   #   chain    = "ethereum"
-#   #   chain_id = 1
-#   #   network  = "ethereum-mainnet"
-#   # }
-#   
-#   # Base multisigs (when you expand)
-#   # "treasury-base" = {
-#   #   name     = "Treasury Multisig (Base)"
-#   #   address  = "0xYourBaseAddress..."
-#   #   chain    = "base"
-#   #   chain_id = 8453
-#   #   network  = "base-mainnet"
-#   # }
-# }
-
-# Supported chains: celo, ethereum, base, polygon, arbitrum, optimism
-# Addresses must be valid Ethereum addresses (0x + 40 hex characters)
-# Network format: {chain}-{network} (e.g., "celo-mainnet", "ethereum-mainnet")

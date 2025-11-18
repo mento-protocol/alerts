@@ -1,7 +1,44 @@
 #!/bin/bash
-set -e          # Fail on any error
-set -o pipefail # Ensure piped commands propagate exit codes properly
-set -u          # Treat unset variables as an error when substituting
+#
+# Project Variables Loader and Cache Manager
+#
+# Purpose:
+#   Loads and caches project variables from Terraform configuration and state.
+#   This script is typically sourced by other scripts that need project information
+#   like project_id, region, function_name, etc.
+#
+# Usage:
+#   # Source to load variables into current shell
+#   source scripts/get-project-vars.sh
+#
+#   # Run directly to see cached values
+#   ./scripts/get-project-vars.sh
+#
+#   # Invalidate cache and reload
+#   ./scripts/get-project-vars.sh --invalidate-cache
+#
+# Requirements:
+#   - gcloud CLI installed and authenticated
+#   - terraform (for reading state)
+#   - variables.tf must exist in project root
+#
+# What it does:
+#   1. Checks for cached values in .project_vars_cache
+#   2. If cache exists and valid, loads from cache
+#   3. If cache missing or invalid, fetches from Terraform and gcloud
+#   4. Caches values for faster subsequent loads
+#   5. Sets gcloud default project and quota project
+#   6. Updates .env file with project_id
+#
+# Variables exported:
+#   - project_id: GCP project ID
+#   - project_name: GCP project name
+#   - region: GCP region
+#   - service_account_email: Service account email
+#   - function_name: Cloud Function name
+#   - function_entry_point: Function entry point name
+
+set -euo pipefail
 
 # Determine script and directory paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

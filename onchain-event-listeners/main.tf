@@ -38,8 +38,7 @@ resource "null_resource" "pause_webhook_before_update" {
   provisioner "local-exec" {
     command = <<-EOT
       # Get webhook ID from Terraform state - find the exact resource path
-      # Match any onchain_event_listeners module instance (supports both old and new names for backward compatibility)
-      STATE_PATH=$(terraform state list | grep -E '\.multisig_webhook$' | grep -E '(onchain_event_listeners|multisig_alerts)\[.*\]' | head -1)
+      STATE_PATH=$(terraform state list | grep -E '\.multisig_webhook$' | grep -E 'onchain_event_listeners\[.*\]' | head -1)
       
       if [ -z "$STATE_PATH" ]; then
         echo "Webhook not found in state, skipping delete (first creation)"
@@ -90,20 +89,16 @@ resource "null_resource" "pause_webhook_before_update" {
 
   # Also run on destroy to pause webhook before deletion
   # Note: Uses QUICKNODE_API_KEY environment variable since destroy provisioners can't reference variables
-  # Uses webhook_id from triggers (which references restapi_object.multisig_webhook.id)
+  # Get webhook ID from state (triggers don't include webhook_id to avoid circular dependency)
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-      # Get webhook ID from triggers (set when resource was created)
-      # Fallback to reading from state if trigger is not available
-      WEBHOOK_ID="${self.triggers.webhook_id}"
+      # Get webhook ID from state
+      STATE_PATH=$(terraform state list | grep -E '\.multisig_webhook$' | grep -E 'onchain_event_listeners\[.*\]' | head -1)
+      WEBHOOK_ID=""
       
-      if [ -z "$WEBHOOK_ID" ] || [ "$WEBHOOK_ID" = "null" ] || [ "$WEBHOOK_ID" = "" ]; then
-        # Fallback: try to get from state (supports both old and new names for backward compatibility)
-        STATE_PATH=$(terraform state list | grep -E '\.multisig_webhook$' | grep -E '(onchain_event_listeners|multisig_alerts)\[.*\]' | head -1)
-        if [ -n "$STATE_PATH" ]; then
-          WEBHOOK_ID=$(terraform state show "$STATE_PATH" 2>/dev/null | grep -E '^\s+id\s+=' | awk '{print $3}' | tr -d '"' || echo "")
-        fi
+      if [ -n "$STATE_PATH" ]; then
+        WEBHOOK_ID=$(terraform state show "$STATE_PATH" 2>/dev/null | grep -E '^\s+id\s+=' | awk '{print $3}' | tr -d '"' || echo "")
       fi
       
       if [ -n "$WEBHOOK_ID" ] && [ "$WEBHOOK_ID" != "" ] && [ "$WEBHOOK_ID" != "null" ]; then
@@ -156,11 +151,12 @@ resource "restapi_object" "multisig_webhook" {
     # Append hash to name to force replacement when config changes
     # This ensures Terraform sees it as a different resource requiring recreation
     name            = "${var.webhook_name}-${substr(local.webhook_data_hash, 0, 8)}"
-    network         = var.network
+    network         = var.quicknode_network_name
     filter_function = local.filter_function_base64
     destination_attributes = {
-      url         = var.webhook_endpoint_url
-      compression = var.compression
+      url            = var.webhook_endpoint_url
+      security_token = var.quicknode_signing_secret
+      compression    = var.compression
     }
     status = "active"
   })

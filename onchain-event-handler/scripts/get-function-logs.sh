@@ -1,16 +1,42 @@
 #!/bin/bash
-set -e          # Fail on any error
-set -o pipefail # Ensure piped commands propagate exit codes properly
-set -u          # Treat unset variables as an error when substituting
+#
+# Cloud Function Logs Viewer
+#
+# Purpose:
+#   Fetches and displays the latest logs for the Cloud Function from Google Cloud Logging.
+#   Supports filtering by rate feed label for easier debugging.
+#
+# Usage:
+#   ./scripts/get-function-logs.sh [rate_feed]
+#
+# Examples:
+#   ./scripts/get-function-logs.sh
+#   ./scripts/get-function-logs.sh CELO/USD
+#
+# Requirements:
+#   - gcloud CLI installed and authenticated
+#   - jq installed
+#   - Project variables must be loaded (via get-project-vars.sh)
+#
+# What it does:
+#   1. Loads project variables (project_id, function_name)
+#   2. Builds log query for Cloud Function
+#   3. Optionally filters by rate_feed label if provided
+#   4. Fetches logs with spinner indicator
+#   5. Formats and displays logs with color coding (ERROR in red)
+#
+# Output:
+#   - Formatted log entries with timestamp, severity, rate feed, and message
+#   - Errors are highlighted in red
 
-# Fetches the latest logs for the Cloud Function and displays them in the terminal.
-# Usage: get-function-logs.sh [rate_feed]
-# Example with rate feed filter: get-function-logs.sh CELO/USD
+set -euo pipefail
 get_function_logs() {
 	# Load the current project variables and spinner utility
 	script_dir=$(dirname "$0")
+	module_dir=$(cd "${script_dir}/.." && pwd)
+	root_dir=$(cd "${module_dir}/.." && pwd)
 	source "${script_dir}/get-project-vars.sh"
-	source "${script_dir}/spinner.sh"
+	source "${root_dir}/scripts/spinner.sh"
 
 	# Optional rate feed filter (first argument)
 	rate_feed="${1-}"

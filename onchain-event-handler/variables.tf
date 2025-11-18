@@ -65,7 +65,6 @@ variable "multisig_webhooks" {
     address        = string
     name           = string
     chain          = string
-    chain_id       = number
     alerts_webhook = string
     events_webhook = string
   }))

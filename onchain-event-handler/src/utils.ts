@@ -2,7 +2,6 @@
  * Utility functions for webhook processing
  */
 
-import crypto from "crypto";
 import { createPublicClient, http, recoverAddress } from "viem";
 import { celo } from "viem/chains";
 import config from "./config";
@@ -18,26 +17,6 @@ export const BLOCK_EXPLORER = {
   block: (number: string) => `https://celoscan.io/block/${number}`,
   address: (addr: string) => `https://celoscan.io/address/${addr}`,
 } as const;
-
-/**
- * Verify QuickNode webhook signature
- */
-export function verifyQuickNodeSignature(
-  payload: string,
-  signature: string | undefined,
-  secret: string | undefined,
-): boolean {
-  if (!signature || !secret) {
-    return false;
-  }
-
-  const expectedSignature = crypto
-    .createHmac("sha256", secret)
-    .update(payload)
-    .digest("hex");
-
-  return signature === expectedSignature;
-}
 
 /**
  * Get event name from log topic0
@@ -65,16 +44,15 @@ export function isSecurityEvent(eventName: string): boolean {
 
 /**
  * Get Discord webhook URL from environment variables
+ * All multisigs share the same two webhook URLs
  */
 export function getWebhookUrl(
-  multisigKey: string,
+  _multisigKey: string,
   channelType: "alerts" | "events",
 ): string | null {
-  // Replace all hyphens with underscores to match Terraform env var naming
-  // The multisig key already includes the chain (e.g., "mento-labs-celo" -> "MENTO_LABS_CELO")
-  const normalizedKey = multisigKey.toUpperCase().replace(/-/g, "_");
+  // All multisigs use the same webhook URLs
   const envKey =
-    `DISCORD_WEBHOOK_${normalizedKey}_${channelType.toUpperCase()}` as keyof typeof config;
+    `DISCORD_WEBHOOK_${channelType.toUpperCase()}` as keyof typeof config;
 
   const webhookUrl = config[envKey];
   if (typeof webhookUrl === "string") {
@@ -461,15 +439,14 @@ export function getMultisigName(multisigKey: string): string {
 /**
  * Get chain info from multisig config
  */
-function getMultisigChainInfo(multisigKey: string): {
+export function getMultisigChainInfo(multisigKey: string): {
   chain: string;
-  chainId: number;
 } | null {
   try {
     const multisigConfigJson = config.MULTISIG_CONFIG;
     const multisigConfig = JSON.parse(multisigConfigJson) as Record<
       string,
-      { address: string; name: string; chain: string; chain_id: number }
+      { address: string; name: string; chain: string }
     >;
 
     const multisigInfo = multisigConfig[multisigKey];
@@ -479,7 +456,6 @@ function getMultisigChainInfo(multisigKey: string): {
 
     return {
       chain: multisigInfo.chain,
-      chainId: multisigInfo.chain_id,
     };
   } catch {
     return null;

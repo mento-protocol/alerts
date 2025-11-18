@@ -1,7 +1,7 @@
 ${abi_comment}
 
 const contracts = ${jsonencode([for addr in contracts : lower(addr)])};
-const abi = \`${abi_json}\`;
+const abi = ${jsonencode(abi)};
 
 function main(stream) {
   const result = [];

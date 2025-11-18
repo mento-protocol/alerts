@@ -62,7 +62,6 @@ module "discord_channel_manager" {
     restapi.discord = restapi.discord
   }
 
-  multisigs           = var.multisigs
   discord_server_id   = var.discord_server_id
   discord_category_id = var.discord_category_id
 }
@@ -96,14 +95,14 @@ module "onchain_event_handler" {
   quicknode_signing_secret = var.quicknode_signing_secret
 
   # Dynamic webhook configuration based on ALL multisigs (across all chains)
+  # All multisigs share the same two webhook URLs
   multisig_webhooks = {
     for key, multisig in var.multisigs : key => {
       address        = multisig.address
       name           = multisig.name
       chain          = multisig.chain
-      chain_id       = multisig.chain_id
-      alerts_webhook = module.discord_channel_manager.webhook_urls[key].alerts
-      events_webhook = module.discord_channel_manager.webhook_urls[key].events
+      alerts_webhook = module.discord_channel_manager.webhook_urls.alerts
+      events_webhook = module.discord_channel_manager.webhook_urls.events
     }
   }
 
@@ -125,11 +124,12 @@ module "onchain_event_listeners" {
     restapi.quicknode = restapi.quicknode
   }
 
-  webhook_endpoint_url = module.onchain_event_handler.function_url
-  multisig_addresses   = [for k, v in each.value : v.address]
-  webhook_name         = "safe-multisig-monitor-${each.key}"
-  network              = each.value[keys(each.value)[0]].network # All multisigs in group have same network
-  quicknode_api_key    = var.quicknode_api_key
+  webhook_endpoint_url     = module.onchain_event_handler.function_url
+  multisig_addresses       = [for k, v in each.value : v.address]
+  webhook_name             = "safe-multisig-monitor-${each.key}"
+  quicknode_network_name   = each.value[keys(each.value)[0]].quicknode_network_name # All multisigs in group have same network
+  quicknode_api_key        = var.quicknode_api_key
+  quicknode_signing_secret = var.quicknode_signing_secret
 
   depends_on = [module.onchain_event_handler]
 }

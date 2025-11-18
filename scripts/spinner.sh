@@ -1,6 +1,31 @@
 #!/bin/bash
-# Shared spinner utility for displaying loading indicators
-# Source this file to use start_spinner and cleanup_spinner functions
+#
+# Spinner Utility for Loading Indicators
+#
+# Purpose:
+#   Provides spinner functions for displaying loading indicators in terminal scripts.
+#   Useful for long-running operations where you want visual feedback.
+#
+# Usage:
+#   # Source the file
+#   source scripts/spinner.sh
+#
+#   # Start spinner
+#   start_spinner "Loading data..."
+#
+#   # Do work...
+#   sleep 5
+#
+#   # Cleanup spinner (automatically called on EXIT, INT, TERM)
+#   cleanup_spinner
+#
+# Functions:
+#   - start_spinner "message": Starts a spinner with the given message
+#   - cleanup_spinner: Stops spinner and restores cursor (called automatically on exit)
+#
+# Note:
+#   Spinner automatically cleans up on script exit, interrupt, or termination.
+#   Manual cleanup is only needed if you want to stop it before script ends.
 
 # Cleanup function to ensure cursor is restored
 cleanup_spinner() {

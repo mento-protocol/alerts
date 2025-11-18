@@ -1,10 +1,34 @@
 #!/bin/bash
-set -e          # Fail on any error
-set -o pipefail # Ensure piped commands propagate exit codes properly
-set -u          # Treat unset variables as an error when substituting
+#
+# Cloud Function Direct Deployment Script
+#
+# Purpose:
+#   Deploys the Cloud Function using gcloud directly, bypassing Terraform's Cloud Build.
+#   This is useful for debugging deployment issues or testing changes without going
+#   through Terraform's deployment pipeline.
+#
+# Usage:
+#   ./scripts/deploy.sh
+#
+# Requirements:
+#   - gcloud CLI installed and authenticated
+#   - jq installed
+#   - terraform (for reading configuration from state)
+#   - Project must be initialized (run get-project-vars.sh first or terraform apply)
+#
+# What it does:
+#   1. Loads project variables (project_id, region, function_name, etc.)
+#   2. Reads function configuration from Terraform state
+#   3. Reads environment variables from Terraform state
+#   4. Ensures safe-abi.json exists in module directory
+#   5. Deploys function using gcloud with Cloud Build (runs npm install and build)
+#   6. Displays function URL after successful deployment
+#
+# Note:
+#   Cloud Build will automatically run `npm install` and `npm run build` when it
+#   detects package.json in the source directory.
 
-# Script to deploy Cloud Function using gcloud directly
-# This bypasses Terraform's Cloud Build and deploys directly, which can help debug deployment issues
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"

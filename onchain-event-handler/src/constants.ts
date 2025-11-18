@@ -103,7 +103,7 @@ export const MULTISIGS: Record<MultisigAddress, MultisigKey> = (() => {
   try {
     const multisigConfig = JSON.parse(multisigConfigJson) as Record<
       string,
-      { address: string; name: string; chain: string; chain_id: number }
+      { address: string; name: string; chain: string }
     >;
 
     // Build mapping: address -> key (the key from the config map)
@@ -140,12 +140,4 @@ export const MULTISIGS: Record<MultisigAddress, MultisigKey> = (() => {
 export const DISCORD_COLORS = {
   ALERT: 0xff4757, // Red for security events
   EVENT: 0x5f27cd, // Purple for operational events
-} as const;
-
-/**
- * Emojis for Discord messages
- */
-export const DISCORD_EMOJIS = {
-  ALERT: "🚨",
-  EVENT: "🔔",
 } as const;

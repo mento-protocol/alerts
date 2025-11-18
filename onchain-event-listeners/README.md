@@ -51,27 +51,27 @@ module "onchain_event_listeners" {
     restapi.quicknode = restapi.quicknode
   }
 
-  webhook_endpoint_url = "https://your-cloud-function-url.run.app"
-  multisig_addresses   = [
+  webhook_endpoint_url   = "https://your-cloud-function-url.run.app"
+  multisig_addresses     = [
     "0x655133d8E90F8190ed5c1F0f3710F602800C0150",  # Mento Labs
     "0x87647780180B8f55980C7D3fFeFe08a9B29e9aE1",  # Reserve
   ]
-  webhook_name = "safe-multisig-monitor"
-  network      = "celo-mainnet"
-  is_active    = true
+  webhook_name           = "safe-multisig-monitor"
+  quicknode_network_name = "celo-mainnet"
+  is_active              = true
 }
 ```
 
 ## Inputs
 
-| Name                   | Description                                | Type           | Default                   | Required |
-| ---------------------- | ------------------------------------------ | -------------- | ------------------------- | -------- |
-| `webhook_endpoint_url` | URL of the Cloud Function endpoint         | `string`       | -                         | Yes      |
-| `multisig_addresses`   | List of Safe multisig addresses to monitor | `list(string)` | -                         | Yes      |
-| `webhook_name`         | Name for the QuickNode webhook             | `string`       | `"safe-multisig-monitor"` | No       |
-| `network`              | Blockchain network identifier              | `string`       | `"celo-mainnet"`          | No       |
-| `is_active`            | Whether the webhook should be active       | `bool`         | `true`                    | No       |
-| `compression`          | Compression method for payloads            | `string`       | `"none"`                  | No       |
+| Name                     | Description                                         | Type           | Default                   | Required |
+| ------------------------ | --------------------------------------------------- | -------------- | ------------------------- | -------- |
+| `webhook_endpoint_url`   | URL of the Cloud Function endpoint                  | `string`       | -                         | Yes      |
+| `multisig_addresses`     | List of Safe multisig addresses to monitor          | `list(string)` | -                         | Yes      |
+| `webhook_name`           | Name for the QuickNode webhook                      | `string`       | `"safe-multisig-monitor"` | No       |
+| `quicknode_network_name` | QuickNode network identifier (e.g., "celo-mainnet") | `string`       | `"celo-mainnet"`          | No       |
+| `is_active`              | Whether the webhook should be active                | `bool`         | `true`                    | No       |
+| `compression`            | Compression method for payloads                     | `string`       | `"none"`                  | No       |
 
 ## Outputs
 

@@ -114,26 +114,29 @@ variable "discord_sentry_role_id" {
 variable "multisigs" {
   description = "Map of multisig configurations to monitor. Can include multisigs from multiple chains."
   type = map(object({
-    name     = string
-    address  = string
-    chain    = string # e.g., "celo", "ethereum", "base"
-    chain_id = number # e.g., 42220, 1, 8453
-    network  = string # e.g., "celo-mainnet", "ethereum-mainnet"
+    name                   = string
+    address                = string
+    chain                  = string # e.g., "celo", "ethereum", "base"
+    quicknode_network_name = string # QuickNode network identifier (e.g., "celo-mainnet", "ethereum-mainnet")
   }))
   default = {
     "mento-labs-celo" = {
-      name     = "Mento Labs Multisig (Celo)"
-      address  = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
-      chain    = "celo"
-      chain_id = 42220
-      network  = "celo-mainnet"
+      name                   = "Mento Labs Multisig (Celo)"
+      address                = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
+      chain                  = "celo"
+      quicknode_network_name = "celo-mainnet"
     }
     "reserve-celo" = {
-      name     = "Reserve Multisig (Celo)"
-      address  = "0x87647780180B8f55980C7D3fFeFe08a9B29e9aE1"
-      chain    = "celo"
-      chain_id = 42220
-      network  = "celo-mainnet"
+      name                   = "Reserve Multisig (Celo)"
+      address                = "0x87647780180B8f55980C7D3fFeFe08a9B29e9aE1"
+      chain                  = "celo"
+      quicknode_network_name = "celo-mainnet"
+    }
+    "mento-labs-eth" = {
+      name                   = "Mento Labs Multisig (Ethereum)"
+      address                = "0xaB125CcB7660b717fc3A1df5d04Ac4cFC3558d8A"
+      chain                  = "ethereum"
+      quicknode_network_name = "ethereum-mainnet"
     }
   }
 
@@ -164,9 +167,27 @@ variable "multisigs" {
   validation {
     condition = alltrue([
       for k, v in var.multisigs :
-      contains([1, 42220, 8453, 137, 42161, 10], v.chain_id)
+      contains([
+        "0g-mainnet", "abstract-mainnet", "abstract-testnet", "arc-testnet", "arbitrum-mainnet", "arbitrum-sepolia",
+        "avalanche-fuji", "avalanche-mainnet", "b3-mainnet", "b3-sepolia", "base-mainnet", "base-sepolia",
+        "bera-mainnet", "bera-bepolia", "bch-mainnet", "bch-testnet", "bitcoin-mainnet", "blast-mainnet",
+        "blast-sepolia", "bnbchain-mainnet", "bnbchain-testnet", "celo-mainnet", "cyber-mainnet", "cyber-sepolia",
+        "ethereum-hoodi", "ethereum-mainnet", "ethereum-sepolia", "fantom-mainnet", "flare-coston2", "flare-mainnet",
+        "flow-mainnet", "flow-testnet", "fraxtal-mainnet", "gnosis-mainnet", "gravity-alpham", "hemi-mainnet",
+        "hemi-testnet", "hyperevm-mainnet", "imx-mainnet", "imx-testnet", "injective-mainnet", "injective-testnet",
+        "ink-mainnet", "ink-sepolia", "joc-mainnet", "kaia-mainnet", "kaia-testnet", "lens-mainnet", "lens-testnet",
+        "linea-mainnet", "lisk-mainnet", "mantle-mainnet", "mantle-sepolia", "mode-mainnet", "monad-testnet",
+        "morph-hoodie", "morph-mainnet", "nova-mainnet", "nomina-mainnet", "nomina-omega", "optimism-mainnet",
+        "optimism-sepolia", "peaq-mainnet", "plasma-mainnet", "plasma-testnet", "polygon-amoy", "polygon-mainnet",
+        "redstone-mainnet", "sahara-testnet", "scroll-mainnet", "scroll-testnet", "sei-mainnet", "sei-testnet",
+        "solana-devnet", "solana-mainnet", "solana-testnet", "sonic-mainnet", "soneium-mainnet", "sophon-mainnet",
+        "sophon-testnet", "story-aeneid", "story-mainnet", "tron-mainnet", "unichain-mainnet", "unichain-sepolia",
+        "vana-mainnet", "vana-moksha", "worldchain-mainnet", "worldchain-sepolia", "xai-mainnet", "xai-sepolia",
+        "xlayer-mainnet", "xrp-mainnet", "xrplevm-mainnet", "xrplevm-testnet", "xrp-testnet", "zerog-galileo",
+        "zkevm-cardona", "zkevm-mainnet", "zksync-mainnet", "zksync-sepolia", "zora-mainnet"
+      ], v.quicknode_network_name)
     ])
-    error_message = "All multisigs must have a valid chain ID: 1 (Ethereum), 42220 (Celo), 8453 (Base), 137 (Polygon), 42161 (Arbitrum), 10 (Optimism)."
+    error_message = "All multisigs must have a valid QuickNode network name. See QuickNode API documentation for supported networks."
   }
 }
 

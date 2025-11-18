@@ -4,8 +4,8 @@ variable "webhook_name" {
   default     = "safe-multisig-monitor"
 }
 
-variable "network" {
-  description = "Blockchain network identifier (e.g., 'celo-mainnet')"
+variable "quicknode_network_name" {
+  description = "QuickNode network identifier (e.g., 'celo-mainnet', 'ethereum-mainnet'). Must be a valid QuickNode network name."
   type        = string
   default     = "celo-mainnet"
 }
@@ -50,5 +50,17 @@ variable "quicknode_api_key" {
   description = "QuickNode API key for pausing webhooks before updates"
   type        = string
   sensitive   = true
+}
+
+variable "quicknode_signing_secret" {
+  description = "Secret token for verifying QuickNode webhook signatures (set as security_token in destination_attributes)"
+  type        = string
+  default     = null
+  sensitive   = true
+
+  validation {
+    condition     = length(var.quicknode_signing_secret) >= 32
+    error_message = "QuickNode signing secret must be at least 32 characters for security."
+  }
 }
 

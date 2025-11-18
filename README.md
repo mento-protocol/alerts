@@ -60,11 +60,10 @@ quicknode_signing_secret = "your-signing-secret-at-least-32-chars"  # Generate: 
 # Multisig Configuration
 multisigs = {
   "mento-labs-celo" = {
-    name     = "Mento Labs Multisig (Celo)"
-    address  = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
-    chain    = "celo"
-    chain_id = 42220
-    network  = "celo-mainnet"
+    name                   = "Mento Labs Multisig (Celo)"
+    address                = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
+    chain                  = "celo"
+    quicknode_network_name = "celo-mainnet"
   }
 }
 
@@ -106,11 +105,10 @@ curl -X POST $(terraform output -raw cloud_function_url)
 ```hcl
 multisigs = {
   "my-multisig" = {
-    name     = "My Multisig"
-    address  = "0x1234567890123456789012345678901234567890"
-    chain    = "celo"
-    chain_id = 42220
-    network  = "celo-mainnet"
+    name                   = "My Multisig"
+    address                = "0x1234567890123456789012345678901234567890"
+    chain                  = "celo"
+    quicknode_network_name = "celo-mainnet"
   }
 }
 ```
@@ -122,30 +120,30 @@ The module automatically groups multisigs by chain and creates one QuickNode web
 ```hcl
 multisigs = {
   "mento-labs-celo" = {
-    name     = "Mento Labs Multisig (Celo)"
-    address  = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
-    chain    = "celo"
-    chain_id = 42220
-    network  = "celo-mainnet"
+    name                   = "Mento Labs Multisig (Celo)"
+    address                = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
+    chain                  = "celo"
+    quicknode_network_name = "celo-mainnet"
   }
   "mento-labs-ethereum" = {
-    name     = "Mento Labs Multisig (Ethereum)"
-    address  = "0x1234567890123456789012345678901234567890"
-    chain    = "ethereum"
-    chain_id = 1
-    network  = "ethereum-mainnet"
+    name                   = "Mento Labs Multisig (Ethereum)"
+    address                = "0x1234567890123456789012345678901234567890"
+    chain                  = "ethereum"
+    quicknode_network_name = "ethereum-mainnet"
   }
 }
 ```
 
 ### Supported Chains
 
-- **Celo**: `chain_id = 42220`, `network = "celo-mainnet"`
-- **Ethereum**: `chain_id = 1`, `network = "ethereum-mainnet"`
-- **Base**: `chain_id = 8453`, `network = "base-mainnet"`
-- **Polygon**: `chain_id = 137`, `network = "polygon-mainnet"`
-- **Arbitrum**: `chain_id = 42161`, `network = "arbitrum-mainnet"`
-- **Optimism**: `chain_id = 10`, `network = "optimism-mainnet"`
+- **Celo**: `chain = "celo"`, `quicknode_network_name = "celo-mainnet"`
+- **Ethereum**: `chain = "ethereum"`, `quicknode_network_name = "ethereum-mainnet"`
+- **Base**: `chain = "base"`, `quicknode_network_name = "base-mainnet"`
+- **Polygon**: `chain = "polygon"`, `quicknode_network_name = "polygon-mainnet"`
+- **Arbitrum**: `chain = "arbitrum"`, `quicknode_network_name = "arbitrum-mainnet"`
+- **Optimism**: `chain = "optimism"`, `quicknode_network_name = "optimism-mainnet"`
+
+**Note:** `quicknode_network_name` must be a valid QuickNode network identifier. See QuickNode API documentation for the full list of supported networks.
 
 ## 📊 What Gets Created
 
@@ -185,11 +183,10 @@ Edit `terraform.tfvars`:
 multisigs = {
   "existing-name" = { ... },
   "new-multisig" = {
-    name     = "New Multisig Name"
-    address  = "0xYourAddress..."
-    chain    = "celo"
-    chain_id = 42220
-    network  = "celo-mainnet"
+    name                   = "New Multisig Name"
+    address                = "0xYourAddress..."
+    chain                  = "celo"
+    quicknode_network_name = "celo-mainnet"
   }
 }
 ```

@@ -13,7 +13,6 @@ locals {
       address        = config.address
       name           = config.name
       chain          = config.chain
-      chain_id       = config.chain_id
       alerts_webhook = config.alerts_webhook
       events_webhook = config.events_webhook
     }

@@ -8,42 +8,24 @@
 # Discord Channels
 #####################
 
-# Create alerts channels for each multisig
+# Create shared alerts channel for all multisigs
 resource "discord_text_channel" "multisig_alerts" {
-  for_each = local.multisigs
-
-  name                     = "🚨︱multisig-alerts-${each.key}"
+  name                     = "🚨︱multisig-alerts"
   server_id                = var.discord_server_id
   category                 = var.discord_category_id
-  topic                    = "Critical security events for ${each.value.name} on ${title(each.value.chain)}"
+  topic                    = "Critical security events for all multisigs (owner changes, threshold modifications, etc.)"
   sync_perms_with_category = true
-  position                 = index(keys(local.multisigs), each.key) * 2 + 1
-
-  lifecycle {
-    precondition {
-      condition     = length(each.value.name) > 0
-      error_message = "Multisig name cannot be empty for ${each.key}."
-    }
-  }
+  position                 = 1
 }
 
-# Create events channels for each multisig
+# Create shared events channel for all multisigs
 resource "discord_text_channel" "multisig_events" {
-  for_each = local.multisigs
-
-  name                     = "🔔︱multisig-events-${each.key}"
+  name                     = "🔔︱multisig-events"
   server_id                = var.discord_server_id
   category                 = var.discord_category_id
-  topic                    = "Transaction events for ${each.value.name} on ${title(each.value.chain)}"
+  topic                    = "Transaction events for all multisigs (executions, approvals, incoming funds, etc.)"
   sync_perms_with_category = true
-  position                 = index(keys(local.multisigs), each.key) * 2 + 2
-
-  lifecycle {
-    precondition {
-      condition     = length(each.value.name) > 0
-      error_message = "Multisig name cannot be empty for ${each.key}."
-    }
-  }
+  position                 = 2
 }
 
 #####################
@@ -52,13 +34,12 @@ resource "discord_text_channel" "multisig_events" {
 # This creates Discord webhooks using the Discord REST API
 # Fully Terraform-native solution - no scripts or manual steps required!
 
-# Create webhooks for alerts channels
+# Create webhook for shared alerts channel
 resource "restapi_object" "discord_webhook_alerts" {
   provider = restapi.discord
-  for_each = local.multisigs
 
   # Path for creating webhook (POST)
-  path = "/channels/${discord_text_channel.multisig_alerts[each.key].id}/webhooks"
+  path = "/channels/${discord_text_channel.multisig_alerts.id}/webhooks"
 
   # Paths for reading, updating, and deleting webhook (using webhook ID from state)
   read_path    = "/webhooks/{id}"
@@ -66,7 +47,7 @@ resource "restapi_object" "discord_webhook_alerts" {
   destroy_path = "/webhooks/{id}"
 
   data = jsonencode({
-    name   = "Monitoring Alerts - ${each.value.name}"
+    name   = "Multisig Alerts"
     avatar = null # Optional: Add a base64 encoded image for the webhook avatar
   })
 
@@ -82,18 +63,17 @@ resource "restapi_object" "discord_webhook_alerts" {
   lifecycle {
     postcondition {
       condition     = self.api_response != null && can(jsondecode(self.api_response).id)
-      error_message = "Discord webhook creation for ${each.value.name} alerts failed or returned invalid response"
+      error_message = "Discord webhook creation for multisig alerts failed or returned invalid response"
     }
   }
 }
 
-# Create webhooks for events channels
+# Create webhook for shared events channel
 resource "restapi_object" "discord_webhook_events" {
   provider = restapi.discord
-  for_each = local.multisigs
 
   # Path for creating webhook (POST)
-  path = "/channels/${discord_text_channel.multisig_events[each.key].id}/webhooks"
+  path = "/channels/${discord_text_channel.multisig_events.id}/webhooks"
 
   # Paths for reading, updating, and deleting webhook (using webhook ID from state)
   read_path    = "/webhooks/{id}"
@@ -101,7 +81,7 @@ resource "restapi_object" "discord_webhook_events" {
   destroy_path = "/webhooks/{id}"
 
   data = jsonencode({
-    name   = "Monitoring Events - ${each.value.name}"
+    name   = "Multisig Events"
     avatar = null # Optional: Add a base64 encoded image for the webhook avatar
   })
 
@@ -117,7 +97,7 @@ resource "restapi_object" "discord_webhook_events" {
   lifecycle {
     postcondition {
       condition     = self.api_response != null && can(jsondecode(self.api_response).id)
-      error_message = "Discord webhook creation for ${each.value.name} events failed or returned invalid response"
+      error_message = "Discord webhook creation for multisig events failed or returned invalid response"
     }
   }
 }

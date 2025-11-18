@@ -59,6 +59,12 @@ resource "google_cloudfunctions2_function" "onchain_event_handler" {
       # See: https://github.com/hashicorp/terraform-provider-google/issues/7467
       service_config[0].environment_variables
     ]
+
+    # Force redeploy when secret version changes or source code changes
+    replace_triggered_by = [
+      google_secret_manager_secret_version.quicknode_signing_secret,
+      google_storage_bucket_object.function_source
+    ]
   }
 
   depends_on = [
@@ -169,6 +175,10 @@ resource "google_cloud_run_v2_service_iam_member" "cloud_function_invoker" {
   # but given the limited damage potential of calling this function it doesn't seem worth the extra effort.
   # Also, we do verify the signature of the webhook request in the function, so we're not really worried about malicious actors.
   member = "allUsers"
+
+  # Explicitly depend on the function to ensure IAM binding is applied after function creation
+  # This prevents 403 errors when the function is recreated
+  depends_on = [google_cloudfunctions2_function.onchain_event_handler]
 }
 
 
@@ -211,9 +221,15 @@ resource "google_secret_manager_secret" "quicknode_signing_secret" {
 }
 
 # Store the secret value
+# Include secret data in the version name to force Cloud Function redeploy when secret changes
 resource "google_secret_manager_secret_version" "quicknode_signing_secret" {
   secret      = google_secret_manager_secret.quicknode_signing_secret.id
   secret_data = var.quicknode_signing_secret
+
+  # Force Cloud Function to redeploy when secret changes by including secret hash in lifecycle
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Grant Cloud Function service account access to read the secret

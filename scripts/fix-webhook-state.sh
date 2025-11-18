@@ -1,32 +1,54 @@
 #!/usr/bin/env bash
-
-# Script to fix Terraform state when QuickNode webhooks get out of sync
-# This happens when webhooks are deleted outside Terraform or when updates fail with 404
+#
+# QuickNode Webhook State Repair Tool
+#
+# Purpose:
+#   Automatically detect and fix Terraform state drift for QuickNode webhooks.
+#   This script identifies webhooks that exist in Terraform state but have been
+#   deleted in QuickNode (or vice versa) and offers to clean up the state.
+#
+# Usage:
+#   ./scripts/fix-webhook-state.sh
+#
+# Requirements:
+#   - terraform (must be initialized)
+#   - curl
+#   - jq (optional, for better output)
+#   - QUICKNODE_API_KEY environment variable OR quicknode_api_key in terraform.tfvars
+#
+# What it does:
+#   1. Finds all webhook resources in Terraform state
+#   2. Checks if each webhook exists in QuickNode via API
+#   3. Identifies orphaned webhooks (in state but not in QuickNode)
+#   4. Offers to remove them from state (interactive prompt)
+#   5. Provides next steps for running terraform apply
+#
+# When to use:
+#   - Error: unexpected response code '404' during terraform apply
+#   - Terraform trying to update webhooks that don't exist
+#   - Webhooks were deleted manually in QuickNode dashboard
+#   - Previous terraform apply failed and left state inconsistent
 
 set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=common.sh
+source "${SCRIPT_DIR}/common.sh"
 
 echo -e "${YELLOW}QuickNode Webhook State Repair Tool${NC}"
 echo "======================================"
 echo ""
 
 # Check if we're in the terraform directory
-if [[ ! -f "main.tf" ]]; then
-	echo -e "${RED}Error: main.tf not found. Please run this script from the terraform root directory.${NC}"
-	exit 1
-fi
+check_terraform_root
 
 # List all on-chain event listener webhook resources in state
 echo "Finding webhook resources in Terraform state..."
-WEBHOOK_RESOURCES=$(terraform state list | grep -E '(onchain_event_listeners|multisig_alerts)\[.*\]\.restapi_object\.multisig_webhook' || echo "")
+WEBHOOK_RESOURCES=$(terraform state list | grep -E 'onchain_event_listeners\[.*\]\.restapi_object\.multisig_webhook' || echo "")
 
 if [[ -z ${WEBHOOK_RESOURCES} ]]; then
-	echo -e "${YELLOW}No webhook resources found in state.${NC}"
+	warn "No webhook resources found in state."
 	exit 0
 fi
 
@@ -38,28 +60,17 @@ echo ""
 # 1. Environment variable
 # 2. terraform.tfvars file
 if [[ -z ${QUICKNODE_API_KEY-} ]]; then
-	echo "QUICKNODE_API_KEY not set, trying to read from terraform.tfvars..."
+	info "QUICKNODE_API_KEY not set, trying to read from terraform.tfvars..."
+	QUICKNODE_API_KEY=$(read_tfvars_value "quicknode_api_key")
 
-	# Try to read from terraform.tfvars
-	if [[ -f "terraform.tfvars" ]]; then
-		# Extract quicknode_api_key value (handles both "value" and 'value')
-		# Using cut for portability across different systems
-		QUICKNODE_API_KEY=$(grep '^quicknode_api_key' terraform.tfvars | head -1 | cut -d'"' -f2)
-
-		# If double quotes didn't work, try single quotes
-		if [[ -z ${QUICKNODE_API_KEY} ]]; then
-			QUICKNODE_API_KEY=$(grep '^quicknode_api_key' terraform.tfvars | head -1 | cut -d"'" -f2)
-		fi
-
-		if [[ -n ${QUICKNODE_API_KEY} ]]; then
-			echo -e "${GREEN}✓ Found QuickNode API key in terraform.tfvars${NC}"
-		fi
+	if [[ -n ${QUICKNODE_API_KEY} ]]; then
+		info "Found QuickNode API key in terraform.tfvars"
 	fi
 fi
 
 # Check if we have an API key now
 if [[ -z ${QUICKNODE_API_KEY-} ]]; then
-	echo -e "${RED}Error: QUICKNODE_API_KEY not found.${NC}"
+	error "QUICKNODE_API_KEY not found."
 	echo ""
 	echo "Please provide your QuickNode API key in one of these ways:"
 	echo ""
@@ -90,7 +101,7 @@ while IFS= read -r resource; do
 	WEBHOOK_ID=$(terraform state show "${resource}" 2>/dev/null | grep -E '^\s+id\s+=' | awk '{print $3}' | tr -d '"' || echo "")
 
 	if [[ -z ${WEBHOOK_ID} ]]; then
-		echo -e "  ${YELLOW}⚠ Could not extract webhook ID from state${NC}"
+		warn "  ⚠ Could not extract webhook ID from state"
 		continue
 	fi
 
@@ -103,12 +114,12 @@ while IFS= read -r resource; do
 		"https://api.quicknode.com/webhooks/rest/v1/webhooks/${WEBHOOK_ID}")
 
 	if [[ ${HTTP_CODE} == "200" ]]; then
-		echo -e "  ${GREEN}✓ Webhook exists in QuickNode${NC}"
+		info "  ✓ Webhook exists in QuickNode"
 	elif [[ ${HTTP_CODE} == "404" ]]; then
-		echo -e "  ${RED}✗ Webhook NOT FOUND in QuickNode (404)${NC}"
+		error "  ✗ Webhook NOT FOUND in QuickNode (404)"
 		MISSING_WEBHOOKS+=("${resource}")
 	else
-		echo -e "  ${YELLOW}⚠ Unexpected response code: ${HTTP_CODE}${NC}"
+		warn "  ⚠ Unexpected response code: ${HTTP_CODE}"
 		cat /tmp/webhook_check.json 2>/dev/null || true
 	fi
 
@@ -118,7 +129,7 @@ done <<<"${WEBHOOK_RESOURCES}"
 
 # If we found missing webhooks, offer to remove them from state
 if [[ ${#MISSING_WEBHOOKS[@]} -gt 0 ]]; then
-	echo -e "${YELLOW}Found ${#MISSING_WEBHOOKS[@]} webhook(s) in Terraform state that don't exist in QuickNode:${NC}"
+	warn "Found ${#MISSING_WEBHOOKS[@]} webhook(s) in Terraform state that don't exist in QuickNode:"
 	for webhook in "${MISSING_WEBHOOKS[@]}"; do
 		echo "  - ${webhook}"
 	done
@@ -132,7 +143,7 @@ if [[ ${#MISSING_WEBHOOKS[@]} -gt 0 ]]; then
 			echo "Removing: ${webhook}"
 			terraform state rm -lock=false "${webhook}"
 		done
-		echo -e "${GREEN}✓ Removed missing webhooks from state${NC}"
+		info "✓ Removed missing webhooks from state"
 		echo ""
 		echo "Next steps:"
 		echo "  1. Run 'terraform plan' to see what will be created"
@@ -144,5 +155,5 @@ if [[ ${#MISSING_WEBHOOKS[@]} -gt 0 ]]; then
 		echo "  terraform state rm 'module.onchain_event_listeners[\"<network>\"].restapi_object.multisig_webhook'"
 	fi
 else
-	echo -e "${GREEN}✓ All webhooks in Terraform state exist in QuickNode${NC}"
+	info "✓ All webhooks in Terraform state exist in QuickNode"
 fi
