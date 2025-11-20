@@ -46,6 +46,11 @@ lint:
         - onchain-event-listeners/main.tf
 
 actions:
+  definitions:
+    - id: run-tests-pre-push
+      triggers:
+        - git_hooks: [pre-push]
+      run: cd onchain-event-handler && npm test
   enabled:
     - commitlint
     - trunk-announce
@@ -53,3 +58,4 @@ actions:
     - trunk-check-pre-push
     - trunk-fmt-pre-commit
     - trunk-upgrade-available
+    - run-tests-pre-push
