@@ -8,7 +8,7 @@ import type { QuickNodeDecodedLog } from "./types";
 
 // Mock the config module to avoid requiring environment variables
 vi.mock("./config", () => ({
-  config: {
+  default: {
     DISCORD_WEBHOOK_ALERTS: "https://discord.com/api/webhooks/test/alerts",
     DISCORD_WEBHOOK_EVENTS: "https://discord.com/api/webhooks/test/events",
     MULTISIG_CONFIG: JSON.stringify({
