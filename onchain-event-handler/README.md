@@ -25,33 +25,37 @@ This module:
 module "onchain_event_handler" {
   source = "./onchain-event-handler"
 
-  project_id = var.gcp_project_id
-  region     = var.gcp_region
+  project_id    = var.gcp_project_id
+  region        = var.gcp_region
 
-  quicknode_signing_secret       = var.quicknode_signing_secret
-  discord_webhook_mento_labs_alerts  = module.discord_resources.webhook_urls.mento_labs.alerts
-  discord_webhook_mento_labs_events  = module.discord_resources.webhook_urls.mento_labs.events
-  discord_webhook_reserve_alerts     = module.discord_resources.webhook_urls.reserve.alerts
-  discord_webhook_reserve_events     = module.discord_resources.webhook_urls.reserve.events
+  quicknode_signing_secret = var.quicknode_signing_secret
+
+  # All multisigs share the same two webhook URLs (alerts and events channels)
+  multisig_webhooks = {
+    for key, multisig in var.multisigs : key => {
+      address        = multisig.address
+      name           = multisig.name
+      chain          = multisig.chain
+      alerts_webhook = module.discord_channel_manager.webhook_urls.alerts
+      events_webhook = module.discord_channel_manager.webhook_urls.events
+    }
+  }
 }
 ```
 
 ## Inputs
 
-| Name                                | Description                               | Type     | Default                   | Required               |
-| ----------------------------------- | ----------------------------------------- | -------- | ------------------------- | ---------------------- |
-| `project_id`                        | GCP project ID                            | `string` | -                         | yes                    |
-| `region`                            | GCP region                                | `string` | `"europe-west1"`          | no                     |
-| `function_name`                     | Function name                             | `string` | `"onchain-event-handler"` | no                     |
-| `memory_mb`                         | Memory in MB                              | `number` | `256`                     | no                     |
-| `timeout_seconds`                   | Timeout in seconds                        | `number` | `60`                      | no                     |
-| `max_instances`                     | Max instances                             | `number` | `10`                      | no                     |
-| `min_instances`                     | Min instances                             | `number` | `0`                       | no                     |
-| `quicknode_signing_secret`          | QuickNode signing secret                  | `string` | -                         | yes (passed from root) |
-| `discord_webhook_mento_labs_alerts` | Discord webhook URL for Mento Labs alerts | `string` | -                         | yes                    |
-| `discord_webhook_mento_labs_events` | Discord webhook URL for Mento Labs events | `string` | -                         | yes                    |
-| `discord_webhook_reserve_alerts`    | Discord webhook URL for Reserve alerts    | `string` | -                         | yes                    |
-| `discord_webhook_reserve_events`    | Discord webhook URL for Reserve events    | `string` | -                         | yes                    |
+| Name                       | Description                                              | Type     | Default                   | Required |
+| -------------------------- | -------------------------------------------------------- | -------- | ------------------------- | -------- |
+| `project_id`               | GCP project ID                                           | `string` | -                         | yes      |
+| `region`                   | GCP region                                               | `string` | `"europe-west1"`          | no       |
+| `function_name`            | Function name                                            | `string` | `"onchain-event-handler"` | no       |
+| `memory_mb`                | Memory in MB                                             | `number` | `256`                     | no       |
+| `timeout_seconds`          | Timeout in seconds                                       | `number` | `60`                      | no       |
+| `max_instances`            | Max instances                                            | `number` | `10`                      | no       |
+| `min_instances`            | Min instances                                            | `number` | `0`                       | no       |
+| `quicknode_signing_secret` | QuickNode signing secret                                 | `string` | -                         | yes      |
+| `multisig_webhooks`        | Map of multisig configs with shared Discord webhook URLs | `map`    | -                         | yes      |
 
 ## Outputs
 
@@ -89,95 +93,55 @@ module "onchain_event_handler" {
 
 ### Step 2: Build the Function
 
-**IMPORTANT**: You must build the TypeScript source before deploying:
+**IMPORTANT**: Build TypeScript before deploying:
 
 ```bash
-# Navigate to the function directory
 cd onchain-event-handler
-
-# Install dependencies
 npm install
-
-# Build TypeScript to JavaScript
 npm run build
-
-# Verify the dist/ directory was created
-ls -la dist/
 ```
 
-The build process compiles TypeScript files from `src/` into JavaScript in `dist/`. The Terraform module will package only the `dist/` folder (excluding source files, Terraform configs, and node_modules).
+The build compiles `src/` to `dist/`. Terraform packages only `dist/` (excluding source files, Terraform configs, and node_modules).
 
 ### Step 3: Configure Terraform Variables
 
-Ensure your `terraform.tfvars` includes all required variables:
-
-```hcl
-# Google Cloud Configuration
-gcp_project_id = "your-gcp-project-id"
-gcp_region     = "europe-west1"
-
-# QuickNode Configuration
-quicknode_api_key        = "your-quicknode-api-key"
-quicknode_signing_secret = "your-signing-secret"
-
-# Discord and other variables (see terraform.tfvars.example)
-```
+Ensure `terraform.tfvars` includes all required variables (see `terraform.tfvars.example` for full list).
 
 ### Step 4: Deploy with Terraform
 
-From the repository root directory:
+From the repository root:
 
 ```bash
-# Initialize Terraform (downloads providers)
 terraform init
-
-# Review what will be created
 terraform plan
-
-# Deploy the Cloud Function
 terraform apply
 ```
 
-**What happens during deployment:**
+**Deployment process:**
 
-1. Terraform archives the function source (including `dist/` folder)
-2. Creates a Cloud Storage bucket for the function source
-3. Uploads the archive to Cloud Storage
-4. Deploys the Cloud Function (2nd gen) with Node.js 22 runtime
-5. Configures environment variables
-6. Sets up public IAM permissions for QuickNode webhook access
+1. Archives function source (`dist/` folder)
+2. Creates Cloud Storage bucket and uploads archive
+3. Deploys Cloud Function (2nd gen, Node.js 22)
+4. Configures environment variables
+5. Sets up public IAM permissions for QuickNode webhook access
 
 ### Step 5: Verify Deployment
 
-After deployment, verify the function is working:
-
 ```bash
-# Get the function URL from Terraform outputs
 terraform output cloud_function_url
-
-# Test the function endpoint (should return an error without proper webhook payload)
-curl $(terraform output -raw cloud_function_url)
+curl $(terraform output -raw cloud_function_url)  # Should return 401 without webhook payload
 ```
 
-The function URL will be used as the webhook endpoint in the `onchain-event-listeners` module.
+The function URL is used as the webhook endpoint in `onchain-event-listeners`.
 
 ### Step 6: Update Function (Redeployment)
 
-When you make changes to the function code:
-
 ```bash
-# 1. Rebuild the TypeScript
-cd onchain-event-handler
-npm run build
-
-# 2. Return to root directory
-cd ..
-
-# 3. Apply changes (Terraform will detect the new build)
+cd onchain-event-handler && npm run build && cd ..
 terraform apply
 ```
 
-Terraform detects changes in the `dist/` folder and automatically creates a new archive with a new hash, triggering a function update.
+Terraform detects `dist/` changes and creates a new archive, triggering a function update.
 
 ## Development
 
@@ -199,59 +163,33 @@ npm install
 npm run build
 ```
 
-**IMPORTANT**: You must build the TypeScript source before deploying with Terraform.
-
-The build process compiles TypeScript files from `src/` into JavaScript in `dist/`. The Terraform module will package only the `dist/` folder (excluding source files, Terraform configs, and node_modules).
+**IMPORTANT**: Build before deploying with Terraform. The build compiles `src/` to `dist/`. Terraform packages only `dist/` (excluding source files, Terraform configs, and node_modules).
 
 ### Local Development
 
 For local development, you'll need to set up environment variables. The function expects several environment variables that are normally provided by Terraform when deployed to GCP.
 
-1. **Generate `.env` file from Terraform:**
+1. **Generate `.env` file:**
 
-   After running `terraform apply` (to create Discord channels and webhooks), generate the `.env` file:
+   After `terraform apply`, generate `.env` from root directory:
 
    ```bash
-   # From the root directory
    npm run generate:env
    ```
 
-   This will create a `.env` file with all required variables:
-   - `MULTISIG_CONFIG`: JSON string with multisig configuration
-   - `DISCORD_WEBHOOK_*`: Discord webhook URLs for each multisig and channel type
-   - `QUICKNODE_SIGNING_SECRET`: Secret for verifying QuickNode webhook signatures
-   - `SUPPORTED_CHAINS`: Comma-separated list of supported chains
+   Creates `.env` with: `MULTISIG_CONFIG`, `DISCORD_WEBHOOK_ALERTS`, `DISCORD_WEBHOOK_EVENTS`, `QUICKNODE_SIGNING_SECRET`, `SUPPORTED_CHAINS`.
 
-2. **Run the function locally:**
-
-   For development (TypeScript):
+2. **Run locally:**
 
    ```bash
-   npm run dev
-   ```
-
-   Or run the compiled version:
-
-   ```bash
-   npm run build
-   npm start
-   ```
-
-   The function will be available at `http://localhost:8080/` by default. You can send HTTP requests to it:
-
-   ```bash
-   curl http://localhost:8080/
-   ```
-
-   To use a different port, set the `PORT` environment variable (functions-framework reads this automatically):
-
-   ```bash
-   PORT=3000 npm start
+   npm run dev        # TypeScript development mode
    # or
-   PORT=3000 npm run dev
+   npm run build && npm start  # Compiled version
    ```
 
-**Note:** If you don't set up `.env`, the code will still run but with warnings. The `MULTISIG_CONFIG` and other environment variables are optional in non-production environments, allowing you to test basic functionality without full configuration.
+   Function available at `http://localhost:8080/` by default. Set `PORT` env var for different port.
+
+   **Note:** Without `.env`, the function runs with warnings. Environment variables are optional in non-production for basic testing.
 
 ## Architecture
 
@@ -312,9 +250,6 @@ gcloud services enable cloudfunctions.googleapis.com cloudbuild.googleapis.com s
 
 ## Notes
 
-- The function source is archived and uploaded to Cloud Storage
-- The archive excludes `node_modules`, `src/`, test files, Terraform files, and git files
-- Only the compiled `dist/` folder is included in the deployment package
-- The function must be built before Terraform deployment
-- Environment variables are passed at deployment time and cannot be changed without redeployment
-- Function updates require rebuilding TypeScript and running `terraform apply`
+- Function source is archived to Cloud Storage (only `dist/` included, excludes `node_modules`, `src/`, tests, Terraform files)
+- Build required before Terraform deployment
+- Environment variables set at deployment time (require redeployment to change)

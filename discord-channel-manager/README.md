@@ -65,14 +65,21 @@ provider "restapi" {
 
 **Required Bot Permissions:** Administrator (or Manage Channels + Manage Webhooks)
 
-## Example: Using with QuickNode
+## Example: Using with Cloud Function
 
 ```hcl
-module "alert_handler" {
+module "onchain_event_handler" {
   source = "./onchain-event-handler"
 
-  discord_webhook_alerts = module.discord_channel_manager.webhook_urls.alerts
-  discord_webhook_events = module.discord_channel_manager.webhook_urls.events
+  multisig_webhooks = {
+    for key, multisig in var.multisigs : key => {
+      address        = multisig.address
+      name           = multisig.name
+      chain          = multisig.chain
+      alerts_webhook = module.discord_channel_manager.webhook_urls.alerts
+      events_webhook = module.discord_channel_manager.webhook_urls.events
+    }
+  }
 }
 ```
 

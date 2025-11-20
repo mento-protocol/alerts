@@ -69,7 +69,7 @@ quicknode_api_key = "your-quicknode-api-key"
 # Example generation: openssl rand -hex 32
 quicknode_signing_secret = "your-secure-random-secret-min-32-chars"
 
-# Note: QuickNode network configuration is now per-multisig (see below)
+# Note: Each multisig specifies its own QuickNode network (see multisigs below)
 
 #####################
 # Optional Settings

@@ -90,7 +90,7 @@ quicknode_signing_secret = "your-signing-secret-at-least-32-chars"  # Generate: 
 # Multisig Configuration
 multisigs = {
   "mento-labs-celo" = {
-    name                   = "Mento Labs Multisig (Celo)"
+    name                   = "Mento Labs Multisig"
     address                = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
     chain                  = "celo"
     quicknode_network_name = "celo-mainnet"
@@ -118,14 +118,9 @@ terraform apply
 ### 3. Verify Deployment
 
 ```bash
-# Check outputs
 terraform output
-
-# Verify resources
 terraform state list
-
-# Test Cloud Function (should return 401 - signature required)
-curl -X POST $(terraform output -raw cloud_function_url)
+curl -X POST $(terraform output -raw cloud_function_url)  # Should return 401
 ```
 
 ## 📖 Usage Examples
@@ -150,13 +145,13 @@ The module automatically groups multisigs by chain and creates one QuickNode web
 ```hcl
 multisigs = {
   "mento-labs-celo" = {
-    name                   = "Mento Labs Multisig (Celo)"
+    name                   = "Mento Labs Multisig"
     address                = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
     chain                  = "celo"
     quicknode_network_name = "celo-mainnet"
   }
   "mento-labs-ethereum" = {
-    name                   = "Mento Labs Multisig (Ethereum)"
+    name                   = "Mento Labs Multisig"
     address                = "0x1234567890123456789012345678901234567890"
     chain                  = "ethereum"
     quicknode_network_name = "ethereum-mainnet"
@@ -181,17 +176,18 @@ multisigs = {
 
 ### Discord Monitoring Infrastructure
 
-**Per multisig:**
+**Shared channels for all multisigs:**
 
-- `#🚨︱multisig-alerts-{name}` - Critical security events
-- `#🔔︱multisig-events-{name}` - Normal transaction events
+- `#🚨︱multisig-alerts` - Critical security events (owner/threshold/module changes)
+- `#🔔︱multisig-events` - Normal transaction events (executions, approvals, funds)
 - Discord webhooks (automated creation)
 
 ### Cloud Function
 
 - Processes QuickNode webhooks from all chains
-- Routes events to appropriate Discord channels
+- Routes security events to alerts channel, operational events to events channel
 - Validates webhook signatures
+- All multisigs share the same two Discord channels
 
 ### QuickNode Webhooks
 
@@ -222,19 +218,15 @@ Then run `terraform apply`.
 ### View Logs
 
 ```bash
-FUNCTION_NAME=$(terraform output -json | jq -r '.function_name.value')
-PROJECT_ID=$(terraform output -raw project_id)
-gcloud functions logs read $FUNCTION_NAME --project=$PROJECT_ID --limit=50
+cd onchain-event-handler
+./scripts/get-logs.sh
 ```
 
 ### Destroy Resources
 
 ```bash
-# Destroy specific module
-terraform destroy -target=module.sentry_alerts
-
-# Destroy everything
-terraform destroy
+terraform destroy -target=module.sentry_alerts  # Specific module
+terraform destroy  # Everything
 ```
 
 ## 🐛 Troubleshooting
@@ -284,14 +276,12 @@ This shows REST API requests/responses for troubleshooting.
 
 ### Code Quality
 
-This repository follows [AWS Terraform best practices](https://docs.aws.amazon.com/prescriptive-guidance/latest/terraform-aws-provider-best-practices/structure.html) (adapted for GCP).
+Follows [AWS Terraform best practices](https://docs.aws.amazon.com/prescriptive-guidance/latest/terraform-aws-provider-best-practices/structure.html) (adapted for GCP):
 
-**Key practices applied:**
-
-- **Standard structure**: All standard Terraform files with data sources organized in dedicated `data.tf` files
-- **Consistent formatting**: Output descriptions before values, proper variable descriptions, and naming conventions
-- **Default labels**: Comprehensive labeling pattern using `merge()` for extensibility (GCP equivalent of AWS tags)
-- **Documentation**: Comprehensive README files for all modules with inline usage examples
+- Standard structure with data sources in dedicated `data.tf` files
+- Consistent formatting (output descriptions, variable descriptions, naming conventions)
+- Comprehensive labeling pattern using `merge()` for extensibility (GCP equivalent of AWS tags)
+- Comprehensive README files for all modules with inline usage examples
 
 ### External Documentation
 

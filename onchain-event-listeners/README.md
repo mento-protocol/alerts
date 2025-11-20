@@ -4,18 +4,14 @@ This module creates and manages QuickNode webhooks for monitoring on-chain event
 
 ## Features
 
-- ✅ **Automated Webhook Creation** - Creates QuickNode webhooks via Terraform
-- ✅ **Smart Event Filtering** - JavaScript filter function runs on QuickNode's servers
-- ✅ **Single Source of Truth** - Event signatures extracted from Safe contract ABI (`safe-abi.json`)
-- ✅ **Error Handling** - Robust error handling prevents webhook failures
-- ✅ **Multi-Address Support** - Monitor multiple multisig addresses in one webhook
+- Automated webhook creation via Terraform
+- Server-side event filtering (JavaScript filter on QuickNode)
+- Event signatures from Safe contract ABI (`safe-abi.json`)
+- Multi-address support (multiple multisigs per webhook)
 
 ## What Gets Created
 
-- **1 QuickNode Webhook** that monitors:
-  - All specified multisig addresses
-  - 16 Safe event types (security + operational)
-  - Filters events before sending to reduce noise
+One QuickNode webhook per chain that monitors all specified multisig addresses and 16 Safe event types (filtered server-side).
 
 ## Event Types Monitored
 
@@ -126,12 +122,7 @@ function main(payload) {
 }
 ```
 
-**Benefits:**
-
-- ✅ Reduces webhook calls (cost optimization)
-- ✅ Reduces Cloud Function invocations
-- ✅ Server-side filtering (fast & efficient)
-- ✅ Error handling prevents webhook failures
+**Benefits:** Reduces webhook calls and Cloud Function invocations (cost optimization), fast server-side filtering, robust error handling.
 
 ## Event Signatures
 
@@ -201,13 +192,11 @@ Event signatures are automatically updated when `safe-abi.json` changes.
 
 ## Cost Optimization
 
-This module uses client-side filtering to minimize costs:
+Server-side filtering minimizes costs:
 
-1. **QuickNode** - Only charged for matching events (filtered on their servers)
-2. **Cloud Functions** - Fewer invocations = lower costs
-3. **Discord** - No rate limiting issues
-
-**Estimated Savings:** ~80% compared to server-side-only filtering
+- QuickNode: Only charged for matching events
+- Cloud Functions: Fewer invocations
+- Estimated savings: ~80% vs server-side-only filtering
 
 ## State Management
 
@@ -346,16 +335,16 @@ module "onchain_event_listeners" {
 
 ## Security
 
-- ✅ **Signature Verification** - Cloud Function verifies QuickNode signatures
-- ✅ **HTTPS Only** - Webhook endpoint must use HTTPS
-- ✅ **Address Validation** - Filter validates address format
-- ✅ **Error Containment** - Errors don't crash webhook
+- Signature verification (HMAC-SHA256)
+- HTTPS-only endpoints
+- Address format validation
+- Error containment (errors don't crash webhook)
 
 ## Performance
 
-- **Latency:** ~2-3 seconds from blockchain event to Discord notification
-- **Throughput:** Handles multiple events per block
-- **Reliability:** Filter function prevents webhook failures
+- Latency: ~2-3 seconds from blockchain event to Discord notification
+- Throughput: Handles multiple events per block
+- Reliability: Filter function prevents webhook failures
 
 ## Related Modules
 

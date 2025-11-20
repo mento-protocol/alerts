@@ -83,13 +83,11 @@ To remove a project:
 
 ## Alert Configuration
 
-Current settings:
+- Frequency: 5 minutes (prevents spam)
+- Conditions: Any error
+- Tags: url, browser, device, os, environment, level, handled
 
-- **Frequency**: 5 minutes (prevents spam)
-- **Conditions**: Any error
-- **Tags Included**: url, browser, device, os, environment, level, handled
-
-To modify, edit the `sentry_issue_alert` resource in `main.tf`.
+To modify, edit `sentry_issue_alert` in `main.tf`.
 
 ## Outputs
 
