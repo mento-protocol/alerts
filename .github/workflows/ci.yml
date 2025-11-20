@@ -1,4 +1,4 @@
-name: Trunk Check
+name: CI
 
 on:
   push:
