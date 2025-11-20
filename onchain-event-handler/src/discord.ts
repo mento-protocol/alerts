@@ -91,46 +91,131 @@ export async function formatDiscordMessage(
 }
 
 /**
- * Send message to Discord webhook
+ * Retry configuration for Discord webhook requests
+ */
+const DISCORD_RETRY_CONFIG = {
+  maxRetries: 3,
+  retryDelayMs: 1000, // Start with 1 second
+  retryableStatusCodes: [429, 500, 502, 503, 504] as number[], // Rate limit and server errors
+} as const;
+
+/**
+ * Check if an error is retryable
+ */
+function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const axiosError = error as AxiosError;
+  const status = axiosError.response?.status;
+
+  // Retry on network errors (no response) or retryable status codes
+  if (!status) {
+    return true; // Network error, retry
+  }
+
+  return DISCORD_RETRY_CONFIG.retryableStatusCodes.includes(status);
+}
+
+/**
+ * Calculate exponential backoff delay
+ */
+function calculateRetryDelay(attempt: number): number {
+  return DISCORD_RETRY_CONFIG.retryDelayMs * Math.pow(2, attempt);
+}
+
+/**
+ * Send message to Discord webhook with retry logic
  * @param webhookUrl - Discord webhook URL to send the message to
  * @param message - Formatted Discord message with embeds
- * @throws {AxiosError} If the webhook request fails
+ * @throws {AxiosError} If the webhook request fails after all retries
  */
 export async function sendToDiscord(
   webhookUrl: string,
   message: DiscordMessage,
 ): Promise<void> {
-  try {
-    await axios.post(webhookUrl, message, {
-      headers: { "Content-Type": "application/json" },
-      timeout: DISCORD_WEBHOOK_TIMEOUT_MS,
-    });
+  let lastError: unknown;
 
-    // Extract key info for logging
-    const embed = message.embeds[0];
-    const description = embed.description || "";
-    const txField = embed.fields.find((f) => f.name === "Transaction Hash");
-    const txHash = txField?.value.match(/\[([^\]]+)\]/)?.[1] || "unknown";
+  for (let attempt = 0; attempt <= DISCORD_RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      await axios.post(webhookUrl, message, {
+        headers: { "Content-Type": "application/json" },
+        timeout: DISCORD_WEBHOOK_TIMEOUT_MS,
+      });
 
-    logger.info("Discord message sent", {
-      description,
-      transactionHash: txHash,
-    });
-  } catch (error) {
-    const axiosError = error as AxiosError;
-    logger.error("Discord webhook error", {
-      error:
-        axiosError instanceof Error
-          ? {
-              name: axiosError.name,
-              message: axiosError.message,
-              stack: axiosError.stack,
-            }
-          : String(axiosError),
-      status: axiosError.response?.status,
-      statusText: axiosError.response?.statusText,
-      data: axiosError.response?.data,
-    });
-    throw error;
+      // Extract key info for logging
+      const embed = message.embeds[0];
+      const description = embed.description || "";
+      const txField = embed.fields.find((f) => f.name === "Transaction Hash");
+      const txHash = txField?.value.match(/\[([^\]]+)\]/)?.[1] || "unknown";
+
+      if (attempt > 0) {
+        logger.info("Discord message sent after retry", {
+          description,
+          transactionHash: txHash,
+          attempt: attempt + 1,
+        });
+      } else {
+        logger.info("Discord message sent", {
+          description,
+          transactionHash: txHash,
+        });
+      }
+
+      return; // Success, exit function
+    } catch (error) {
+      lastError = error;
+
+      const axiosError = error as AxiosError;
+      const isLastAttempt = attempt === DISCORD_RETRY_CONFIG.maxRetries;
+
+      // Log error details
+      logger.warn("Discord webhook attempt failed", {
+        attempt: attempt + 1,
+        maxRetries: DISCORD_RETRY_CONFIG.maxRetries + 1,
+        error:
+          axiosError instanceof Error
+            ? {
+                name: axiosError.name,
+                message: axiosError.message,
+              }
+            : String(axiosError),
+        status: axiosError.response?.status,
+        statusText: axiosError.response?.statusText,
+      });
+
+      // Check if we should retry
+      if (!isLastAttempt && isRetryableError(error)) {
+        const delay = calculateRetryDelay(attempt);
+        logger.info("Retrying Discord webhook request", {
+          attempt: attempt + 2,
+          delayMs: delay,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue; // Retry
+      }
+
+      // Not retryable or last attempt, break and throw
+      break;
+    }
   }
+
+  // All retries exhausted, log final error and throw
+  const axiosError = lastError as AxiosError;
+  logger.error("Discord webhook failed after all retries", {
+    error:
+      axiosError instanceof Error
+        ? {
+            name: axiosError.name,
+            message: axiosError.message,
+            stack: axiosError.stack,
+          }
+        : String(axiosError),
+    status: axiosError.response?.status,
+    statusText: axiosError.response?.statusText,
+    data: axiosError.response?.data,
+  });
+
+  throw lastError;
 }

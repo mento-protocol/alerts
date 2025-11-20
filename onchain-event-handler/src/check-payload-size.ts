@@ -12,10 +12,17 @@ interface PayloadSizeCheck {
 }
 
 /**
+ * Extended Request interface that includes rawBody for payload size checking
+ */
+interface RequestWithRawBody extends Request {
+  rawBody?: Buffer;
+}
+
+/**
  * Check if request payload size is within limits
  */
 export function checkPayloadSize(req: Request): PayloadSizeCheck {
-  const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
+  const rawBody = (req as RequestWithRawBody).rawBody;
   const payloadSize = rawBody
     ? rawBody.length
     : typeof req.body === "string"

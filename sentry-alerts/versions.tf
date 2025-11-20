@@ -12,3 +12,6 @@ terraform {
   }
 }
 
+# Providers are passed from the root module
+# This ensures the module uses the same provider configuration as the root
+

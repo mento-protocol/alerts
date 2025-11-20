@@ -8,6 +8,13 @@ type ValidationResult =
   | { valid: false; status: number; message: string; error?: unknown };
 
 /**
+ * Extended Request interface that includes rawBody for signature verification
+ */
+interface RequestWithRawBody extends Request {
+  rawBody?: Buffer;
+}
+
+/**
  * Validate QuickNode webhook request signature
  * Extracts headers, retrieves payload, and verifies signature.
  *
@@ -50,7 +57,7 @@ export function validateQuickNodeWebhook(req: Request): ValidationResult {
   // Try to access rawBody first (if available from Express middleware)
   // Otherwise reconstruct from parsed body
   let payload: string;
-  const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
+  const rawBody = (req as RequestWithRawBody).rawBody;
   if (rawBody) {
     // Use raw body if available (as string)
     payload = rawBody.toString("utf8");

@@ -187,24 +187,6 @@ function calculateBotPermissions(
   return totalPerms;
 }
 
-/**
- * Format permission name for display
- */
-function _formatPermissionName(permName: string): string {
-  const mapping: Record<string, string> = {
-    MANAGE_CHANNELS: "Manage Channels",
-    MANAGE_ROLES: "Manage Roles",
-    MANAGE_WEBHOOKS: "Manage Webhooks",
-    VIEW_CHANNEL: "View Channels",
-    SEND_MESSAGES: "Send Messages",
-    ADMINISTRATOR: "Administrator",
-  };
-  return (
-    mapping[permName] ||
-    permName.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
-  );
-}
-
 interface DiscordChannel {
   id: string;
   name: string;
@@ -216,6 +198,192 @@ interface DiscordChannel {
     allow: string;
     deny: string;
   }>;
+}
+
+/**
+ * Extract channel ID from a resource instance
+ */
+function extractIdFromInstance(instance: unknown): string | null {
+  if (!instance || typeof instance !== "object") {
+    return null;
+  }
+
+  const instanceRecord = instance as { attributes?: { id?: unknown } };
+  const attrs = instanceRecord.attributes;
+  if (attrs && attrs.id) {
+    return String(attrs.id);
+  }
+
+  return null;
+}
+
+/**
+ * Extract channel ID from resource attributes
+ */
+function extractIdFromAttributes(attributes: unknown): string | null {
+  if (!attributes || typeof attributes !== "object") {
+    return null;
+  }
+
+  const attrs = attributes as { id?: unknown };
+  if (attrs.id) {
+    return String(attrs.id);
+  }
+
+  return null;
+}
+
+/**
+ * Check if an object represents a discord_text_channel resource
+ */
+function isDiscordTextChannelResource(obj: Record<string, unknown>): boolean {
+  const type = obj.type;
+  return (
+    type === "discord_text_channel" ||
+    (typeof type === "string" && type.includes("discord_text_channel"))
+  );
+}
+
+/**
+ * Extract channel IDs from a resource object
+ */
+function extractIdsFromResource(
+  obj: Record<string, unknown>,
+  channelIds: string[],
+): void {
+  if (!isDiscordTextChannelResource(obj)) {
+    return;
+  }
+
+  // Handle instances array format
+  if (Array.isArray(obj.instances)) {
+    for (const instance of obj.instances) {
+      const id = extractIdFromInstance(instance);
+      if (id) {
+        channelIds.push(id);
+      }
+    }
+  }
+
+  // Handle single instance format
+  if (obj.attributes) {
+    const id = extractIdFromAttributes(obj.attributes);
+    if (id) {
+      channelIds.push(id);
+    }
+  }
+}
+
+/**
+ * Extract channel IDs from resource_changes array
+ */
+function extractIdsFromResourceChanges(
+  resourceChanges: unknown[],
+  channelIds: string[],
+): void {
+  for (const change of resourceChanges) {
+    if (!change || typeof change !== "object") {
+      continue;
+    }
+
+    const changeRecord = change as { type?: unknown };
+    if (
+      typeof changeRecord.type === "string" &&
+      changeRecord.type.includes("discord_text_channel")
+    ) {
+      const typedChange = change as {
+        instances?: Array<{ attributes?: { id?: unknown } }>;
+        values?: { id?: unknown };
+      };
+
+      if (Array.isArray(typedChange.instances)) {
+        for (const instance of typedChange.instances) {
+          const id = extractIdFromInstance(instance);
+          if (id) {
+            channelIds.push(id);
+          }
+        }
+      }
+
+      if (typedChange.values) {
+        const id = extractIdFromAttributes(typedChange.values);
+        if (id) {
+          channelIds.push(id);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Recursively search for discord_text_channel resources in Terraform state
+ */
+function extractChannelIds(
+  obj: unknown,
+  channelIds: string[],
+  visited = new WeakSet<object>(),
+): void {
+  if (!obj || typeof obj !== "object") {
+    return;
+  }
+
+  // Prevent infinite loops with circular references
+  if (visited.has(obj as object)) {
+    return;
+  }
+  visited.add(obj as object);
+
+  const objRecord = obj as Record<string, unknown>;
+
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      extractChannelIds(item, channelIds, visited);
+    }
+    return;
+  }
+
+  // Handle resource objects
+  extractIdsFromResource(objRecord, channelIds);
+
+  // Handle modules
+  if (Array.isArray(objRecord.modules)) {
+    for (const module of objRecord.modules) {
+      if (module && typeof module === "object" && "resources" in module) {
+        extractChannelIds(
+          (module as { resources: unknown }).resources,
+          channelIds,
+          visited,
+        );
+      }
+    }
+  }
+
+  // Handle top-level resources
+  if (Array.isArray(objRecord.resources)) {
+    extractChannelIds(objRecord.resources, channelIds, visited);
+  }
+
+  // Handle resource_changes
+  if (Array.isArray(objRecord.resource_changes)) {
+    extractIdsFromResourceChanges(objRecord.resource_changes, channelIds);
+  }
+
+  // Recursively search other properties (excluding already processed ones)
+  const processedKeys = new Set([
+    "type",
+    "instances",
+    "attributes",
+    "resources",
+    "modules",
+    "resource_changes",
+  ]);
+
+  for (const key in objRecord) {
+    if (!processedKeys.has(key)) {
+      extractChannelIds(objRecord[key], channelIds, visited);
+    }
+  }
 }
 
 /**
@@ -239,118 +407,7 @@ function readChannelIdsFromState(): string[] {
     const state = JSON.parse(stateJsonOutput);
     const channelIds: string[] = [];
 
-    // Recursively search for discord_text_channel resources
-    function extractChannelIds(obj: unknown): void {
-      if (!obj || typeof obj !== "object") {
-        return;
-      }
-
-      const objRecord = obj as Record<string, unknown>;
-
-      // Handle resources array
-      if (Array.isArray(obj)) {
-        for (const item of obj) {
-          extractChannelIds(item);
-        }
-        return;
-      }
-
-      // Handle resource object - check for both old and new state formats
-      if (
-        objRecord.type === "discord_text_channel" ||
-        (typeof objRecord.type === "string" &&
-          objRecord.type.includes("discord_text_channel"))
-      ) {
-        // New format: resources[].instances[].attributes.id
-        if (objRecord.instances && Array.isArray(objRecord.instances)) {
-          for (const instance of objRecord.instances) {
-            if (
-              instance &&
-              typeof instance === "object" &&
-              "attributes" in instance
-            ) {
-              const attrs = (instance as { attributes?: { id?: unknown } })
-                .attributes;
-              if (attrs && attrs.id) {
-                channelIds.push(String(attrs.id));
-              }
-            }
-          }
-        }
-        // Also handle single instance format
-        if (
-          objRecord.attributes &&
-          typeof objRecord.attributes === "object" &&
-          "id" in objRecord.attributes
-        ) {
-          const attrs = objRecord.attributes as { id?: unknown };
-          if (attrs.id) {
-            channelIds.push(String(attrs.id));
-          }
-        }
-      }
-
-      // Handle modules (nested structure)
-      if (objRecord.modules && Array.isArray(objRecord.modules)) {
-        for (const module of objRecord.modules) {
-          if (module && typeof module === "object" && "resources" in module) {
-            extractChannelIds((module as { resources: unknown }).resources);
-          }
-        }
-      }
-
-      // Handle resources at top level
-      if (objRecord.resources && Array.isArray(objRecord.resources)) {
-        extractChannelIds(objRecord.resources);
-      }
-
-      // Handle new state format with resource_changes
-      if (
-        objRecord.resource_changes &&
-        Array.isArray(objRecord.resource_changes)
-      ) {
-        for (const change of objRecord.resource_changes) {
-          if (
-            change &&
-            typeof change === "object" &&
-            "type" in change &&
-            typeof (change as { type: unknown }).type === "string" &&
-            (change as { type: string }).type.includes("discord_text_channel")
-          ) {
-            const changeRecord = change as {
-              instances?: Array<{ attributes?: { id?: unknown } }>;
-              values?: { id?: unknown };
-            };
-            if (changeRecord.instances) {
-              for (const instance of changeRecord.instances) {
-                if (instance.attributes?.id) {
-                  channelIds.push(String(instance.attributes.id));
-                }
-              }
-            }
-            if (changeRecord.values?.id) {
-              channelIds.push(String(changeRecord.values.id));
-            }
-          }
-        }
-      }
-
-      // Recursively search all properties
-      for (const key in objRecord) {
-        if (
-          key !== "type" &&
-          key !== "instances" &&
-          key !== "attributes" &&
-          key !== "resources" &&
-          key !== "modules" &&
-          key !== "resource_changes"
-        ) {
-          extractChannelIds(objRecord[key]);
-        }
-      }
-    }
-
-    extractChannelIds(state);
+    extractChannelIds(state, channelIds);
 
     // Remove duplicates
     return Array.from(new Set(channelIds));
@@ -1039,15 +1096,24 @@ async function main(): Promise<void> {
           }
         }
 
-        // Clean up
+        // Clean up test channel
         try {
           await makeRequest(
             `${apiBase}/channels/${testChannel.id}`,
             botToken,
             "DELETE",
           );
-        } catch {
-          // Silent fail
+        } catch (cleanupError) {
+          const cleanupErrorMessage =
+            cleanupError instanceof Error
+              ? cleanupError.message
+              : String(cleanupError);
+          console.log(
+            `${Colors.YELLOW}⚠ Warning: Could not delete test channel ${testChannel.id}: ${cleanupErrorMessage}${Colors.NC}`,
+          );
+          console.log(
+            `${Colors.CYAN}💡 Please manually delete the test channel if it still exists${Colors.NC}`,
+          );
         }
       } catch {
         console.log(

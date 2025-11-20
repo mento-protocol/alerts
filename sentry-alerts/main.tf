@@ -7,8 +7,8 @@ resource "discord_channel_permission" "sentry_category_access" {
   channel_id   = var.discord_category_id
   overwrite_id = var.discord_sentry_role_id
   type         = "role"
-  allow        = 1024 # View Channel permission (1 << 10)
-  deny         = 0    # Don't explicitly deny any permissions
+  allow        = local.discord_view_channel_permission
+  deny         = 0 # Don't explicitly deny any permissions
 }
 
 # Create Discord alert channels for each Sentry project
@@ -20,8 +20,7 @@ resource "discord_text_channel" "sentry_alerts" {
   category                 = var.discord_category_id
   topic                    = "Sentry alerts for ${each.key} project"
   sync_perms_with_category = true
-  # Position channels alphabetically, starting at 100 to appear after existing channels
-  position = 100 + index(sort([for p in local.projects : "sentry-${p.slug}"]), "sentry-${each.key}")
+  position                 = local.channel_positions[each.key]
 }
 
 ###############

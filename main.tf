@@ -70,6 +70,11 @@ module "discord_channel_manager" {
 module "sentry_alerts" {
   source = "./sentry-alerts"
 
+  providers = {
+    sentry  = sentry
+    discord = discord
+  }
+
   # Sentry configuration
   sentry_organization_slug = var.sentry_organization_slug
   sentry_team_slug         = var.sentry_team_slug
