@@ -1,17 +1,28 @@
-variable "sentry_auth_token" {
-  description = "Sentry authentication token"
+######################
+# Sentry Variables
+######################
+
+variable "sentry_organization_slug" {
+  description = "Sentry organization slug (from URL: https://[slug].sentry.io)"
   type        = string
-  sensitive   = true
 }
 
-variable "discord_bot_token" {
-  description = "Discord bot token"
+variable "sentry_team_slug" {
+  description = "Sentry team slug"
   type        = string
-  sensitive   = true
 }
+
+######################
+# Discord Variables
+######################
 
 variable "discord_server_id" {
   description = "Discord server ID"
+  type        = string
+}
+
+variable "discord_server_name" {
+  description = "Discord server name as it appears in Sentry"
   type        = string
 }
 

@@ -1,11 +1,32 @@
 # Terraform
-*.tfvars
-*.tfvars.json
 .terraform/
 .terraform.lock.hcl
-terraform.tfstate
-terraform.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+*.tfvars.json
+*.tfstate
+*.tfstate.*
+
+# Node.js
+node_modules/
+dist/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+*.zip
+
+# Terraform-generated files
+onchain-event-handler/safe-abi.json
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak

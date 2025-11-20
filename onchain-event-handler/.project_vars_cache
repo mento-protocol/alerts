@@ -1,0 +1,6 @@
+project_id=alerts-57ed
+project_name=alerts
+region=europe-west1
+service_account_email=cloudbuild-sa@alerts-57ed.iam.gserviceaccount.com
+function_name=onchain-event-handler
+function_entry_point=processQuicknodeWebhook

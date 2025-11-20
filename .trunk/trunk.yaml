@@ -2,41 +2,60 @@
 # To learn more about the format of this file, see https://docs.trunk.io/reference/trunk-yaml
 version: 0.1
 cli:
-  version: 1.22.9
+  version: 1.25.0
 # Trunk provides extensibility via plugins. (https://docs.trunk.io/plugins)
 plugins:
   sources:
     - id: trunk
-      ref: v1.6.6
+      ref: v1.7.3
       uri: https://github.com/trunk-io/plugins
 # Many linters and tools depend on runtimes - configure them here. (https://docs.trunk.io/runtimes)
 runtimes:
   enabled:
     - go@1.21.0
-    - node@18.20.5
+    - node@22.16.0
     - python@3.10.8
 # This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
 lint:
   enabled:
-    - actionlint@1.7.7
-    - gitleaks@8.23.1
-    - markdown-link-check@3.13.6
-    - markdownlint@0.43.0
-    - osv-scanner@1.9.2
-    - pre-commit-hooks@5.0.0
-    - terrascan@1.19.1
-    - checkov@3.2.354
+    - actionlint@1.7.8
+    - checkov@3.2.493
+    - eslint@9.39.1
     - git-diff-check
-    - prettier@3.4.2
+    - gitleaks@8.29.0
+    - markdownlint@0.45.0
+    - osv-scanner@2.2.4
+    - pre-commit-hooks@5.0.0
+    - prettier@3.6.2
+    - shellcheck@0.11.0
+    - shfmt@3.6.0
+    - taplo@0.10.0
     - terraform@1.1.0
-    - tflint@0.55.0
-    - trufflehog@3.88.2
-    - yamllint@1.35.1
+    - terrascan@1.19.1
+    - tflint@0.59.1
+    - trufflehog@3.90.13
+    - yamllint@1.37.1
+  ignore:
+    - linters: [terrascan]
+      paths:
+        # Terrascan doesn't support precondition/postcondition blocks (Terraform 1.2+ feature)
+        - discord-monitoring/main.tf
+        - alert-handler-cloud-function/main.tf
+        - discord-channel-manager/main.tf
+        - onchain-event-handler/main.tf
+        - onchain-event-listeners/main.tf
 
 actions:
+  definitions:
+    - id: run-tests-pre-push
+      triggers:
+        - git_hooks: [pre-push]
+      run: cd onchain-event-handler && npm test
   enabled:
     - commitlint
     - trunk-announce
+    - trunk-check-pre-commit
     - trunk-check-pre-push
     - trunk-fmt-pre-commit
     - trunk-upgrade-available
+    - run-tests-pre-push

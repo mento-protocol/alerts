@@ -1,0 +1,24 @@
+{
+  "name": "alerts",
+  "version": "1.0.0",
+  "description": "This repository manages alert rules for monitoring Mento's infrastructure using Terraform.",
+  "scripts": {
+    "knip": "knip"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mento-protocol/alerts.git"
+  },
+  "keywords": [],
+  "author": "Philip Paetz <philip.paetz@me.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mento-protocol/alerts/issues"
+  },
+  "homepage": "https://github.com/mento-protocol/alerts#readme",
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "knip": "^5.70.0",
+    "typescript-eslint": "^8.46.4"
+  }
+}
