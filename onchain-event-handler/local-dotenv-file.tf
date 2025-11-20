@@ -1,24 +1,9 @@
 # Generate .env file for local development
 # This file creates a .env file in the onchain-event-handler directory with all necessary
 # environment variables derived from Terraform variables.
+# Reuses locals from locals.tf to avoid duplication
 # Run: terraform apply -target=module.onchain_event_handler.local_file.env_file
 # or: npm run generate:env (from onchain-event-handler directory)
-
-# Build multisig config with webhooks for MULTISIG_CONFIG JSON
-# Reuses locals from locals.tf to avoid duplication
-locals {
-  # Build the multisig config structure with webhooks for the .env file
-  multisig_config_with_webhooks = {
-    for key, config in local.multisig_webhooks_nonsensitive : key => {
-      address        = config.address
-      name           = config.name
-      chain          = config.chain
-      alerts_webhook = config.alerts_webhook
-      events_webhook = config.events_webhook
-    }
-  }
-}
-
 resource "local_file" "env_file" {
   filename = "${path.module}/.env"
   content  = <<-EOT
@@ -29,8 +14,8 @@ resource "local_file" "env_file" {
 # GCP Project Configuration
 GCP_PROJECT_ID=${var.project_id}
 
-# Multisig Configuration (JSON format)
-MULTISIG_CONFIG=${jsonencode(local.multisig_config_with_webhooks)}
+# Multisig Configuration (JSON format, without webhooks)
+MULTISIG_CONFIG=${jsonencode(local.multisig_config_for_json)}
 
 # Supported Chains (comma-separated)
 SUPPORTED_CHAINS=${join(",", local.chains)}
@@ -38,11 +23,9 @@ SUPPORTED_CHAINS=${join(",", local.chains)}
 # QuickNode Configuration
 QUICKNODE_SIGNING_SECRET=${var.quicknode_signing_secret}
 
-# Discord Webhook URLs (individual variables for each multisig)
-%{for key, config in local.multisig_webhooks_nonsensitive~}
-DISCORD_WEBHOOK_${upper(replace(key, "-", "_"))}_ALERTS=${config.alerts_webhook}
-DISCORD_WEBHOOK_${upper(replace(key, "-", "_"))}_EVENTS=${config.events_webhook}
-%{endfor~}
+# Discord Webhook URLs (shared across all multisigs)
+DISCORD_WEBHOOK_ALERTS=${local.shared_webhook_urls.alerts}
+DISCORD_WEBHOOK_EVENTS=${local.shared_webhook_urls.events}
   EOT
 }
 

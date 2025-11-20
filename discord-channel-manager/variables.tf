@@ -7,4 +7,3 @@ variable "discord_category_id" {
   description = "Discord category ID where alert channels will be created"
   type        = string
 }
-

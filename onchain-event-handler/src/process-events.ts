@@ -1,5 +1,6 @@
 import type { EventContext } from "./build-event-context";
 import { formatDiscordMessage, sendToDiscord } from "./discord";
+import { logger } from "./logger";
 import type { ProcessedEvent, QuickNodeWebhookPayload } from "./types";
 import { getMultisigKey, getWebhookUrl, isSecurityEvent } from "./utils";
 
@@ -24,7 +25,7 @@ export async function processEvents(
       logEntry.name === "ExecutionSuccess" &&
       hasSafeMultiSigTx.has(logEntry.transactionHash.toLowerCase())
     ) {
-      console.info("Skipping ExecutionSuccess notification", {
+      logger.info("Skipping ExecutionSuccess notification", {
         reason: "SafeMultiSigTransaction already sent",
         transactionHash: logEntry.transactionHash,
       });
@@ -39,7 +40,7 @@ export async function processEvents(
       try {
         return await processEvent(logEntry, txHashMap);
       } catch (error) {
-        console.error("Error processing log", {
+        logger.error("Error processing log", {
           error:
             error instanceof Error
               ? {
@@ -100,7 +101,7 @@ async function processEvent(
   // 1. Validate required fields
   const validation = validateLog(logEntry);
   if (!validation.valid) {
-    console.warn("Invalid log entry", {
+    logger.warn("Invalid log entry", {
       error: validation.error,
       address: logEntry.address,
       name: logEntry.name,
@@ -117,7 +118,7 @@ async function processEvent(
   const multisigKey = getMultisigKey(multisigAddress);
 
   if (!multisigKey) {
-    console.warn("Unknown multisig address", {
+    logger.warn("Unknown multisig address", {
       address: multisigAddress,
     });
     return null;
@@ -130,7 +131,7 @@ async function processEvent(
   // 5. Get webhook URL
   const webhookUrl = getWebhookUrl(multisigKey, channelType);
   if (!webhookUrl) {
-    console.error("No webhook URL found", {
+    logger.error("No webhook URL found", {
       multisigKey,
       channelType,
     });
@@ -148,7 +149,7 @@ async function processEvent(
   // 7. Send to Discord
   await sendToDiscord(webhookUrl, discordMessage);
 
-  console.info("Event processed successfully", {
+  logger.info("Event processed successfully", {
     multisigKey,
     eventName,
     channelType,

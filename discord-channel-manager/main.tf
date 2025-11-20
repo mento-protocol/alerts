@@ -1,12 +1,8 @@
-#####################
-# Discord Monitoring Infrastructure
-#####################
-# This module creates Discord channels and webhooks for blockchain monitoring
-# Provider-agnostic setup that can be used with QuickNode, Tenderly, or other services
+# This module creates Discord channels and webhooks to post automated alerts into
 
-#####################
-# Discord Channels
-#####################
+####################
+# Discord Channels #
+####################
 
 # Create shared alerts channel for all multisigs
 resource "discord_text_channel" "multisig_alerts" {
@@ -28,11 +24,11 @@ resource "discord_text_channel" "multisig_events" {
   position                 = 2
 }
 
-#####################
-# Discord Webhooks via REST API Provider
-#####################
-# This creates Discord webhooks using the Discord REST API
-# Fully Terraform-native solution - no scripts or manual steps required!
+####################
+# Discord Webhooks #
+####################
+# The Lucky3028/discord Discord terraform provider doesn't include a
+# webhook resource, so we use the restapi provider to manage webhooks.
 
 # Create webhook for shared alerts channel
 resource "restapi_object" "discord_webhook_alerts" {
@@ -59,7 +55,6 @@ resource "restapi_object" "discord_webhook_alerts" {
 
   depends_on = [discord_text_channel.multisig_alerts]
 
-  # trunk-ignore(terrascan): postcondition blocks are valid Terraform 1.2+ syntax
   lifecycle {
     postcondition {
       condition     = self.api_response != null && can(jsondecode(self.api_response).id)
@@ -93,7 +88,6 @@ resource "restapi_object" "discord_webhook_events" {
 
   depends_on = [discord_text_channel.multisig_events]
 
-  # trunk-ignore(terrascan): postcondition blocks are valid Terraform 1.2+ syntax
   lifecycle {
     postcondition {
       condition     = self.api_response != null && can(jsondecode(self.api_response).id)

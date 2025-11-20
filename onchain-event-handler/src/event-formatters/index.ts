@@ -15,7 +15,7 @@ import * as transactionFormatters from "./transaction-formatters";
  * Note: Some formatters may need additional parameters (like chainName for SafeMultiSigTransaction)
  * These are handled separately in decodeEventData
  */
-export type EventFormatter = (
+type EventFormatter = (
   log: QuickNodeDecodedLog,
   chainConfig: { decimals: number; symbol: string },
   txHash?: string,
@@ -24,7 +24,7 @@ export type EventFormatter = (
 /**
  * Registry of event formatters
  */
-export const EVENT_FORMATTERS: Record<string, EventFormatter> = {
+const EVENT_FORMATTERS: Record<string, EventFormatter> = {
   // Owner management events
   AddedOwner: ownerFormatters.formatOwnerEvent,
   RemovedOwner: ownerFormatters.formatOwnerEvent,

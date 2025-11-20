@@ -23,7 +23,7 @@ export interface DiscordEmbedField {
   inline?: boolean;
 }
 
-export interface DiscordEmbed {
+interface DiscordEmbed {
   title: string;
   description: string;
   color: number;

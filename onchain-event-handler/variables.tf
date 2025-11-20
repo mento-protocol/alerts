@@ -94,3 +94,15 @@ variable "project_service_account_email" {
   default     = null
 }
 
+variable "runtime" {
+  description = "Cloud Function runtime (e.g., nodejs22, nodejs20)"
+  type        = string
+  default     = "nodejs22"
+}
+
+variable "secret_name" {
+  description = "Name of the Secret Manager secret for QuickNode signing secret"
+  type        = string
+  default     = "quicknode-signing-secret"
+}
+

@@ -18,11 +18,20 @@
 #
 # What it does:
 #   1. Loads project variables (project_id, region, function_name, etc.)
-#   2. Reads function configuration from Terraform state
+#   2. Reads ALL function configuration from Terraform state (single source of truth)
 #   3. Reads environment variables from Terraform state
 #   4. Ensures safe-abi.json exists in module directory
 #   5. Deploys function using gcloud with Cloud Build (runs npm install and build)
 #   6. Displays function URL after successful deployment
+#
+# Single Source of Truth:
+#   This script uses Terraform files (variables.tf and main.tf) as the single source
+#   of truth for all function parameters including:
+#   - Function name, runtime, entry point (from variables.tf and main.tf)
+#   - Memory, timeout, instance counts (from variables.tf)
+#   - Secret names (from main.tf)
+#   Environment variables are read from Terraform state (computed values).
+#   No Terraform state required for basic configuration - works before first terraform apply.
 #
 # Note:
 #   Cloud Build will automatically run `npm install` and `npm run build` when it
@@ -44,219 +53,296 @@ else
 	exit 1
 fi
 
-# Check requirements first
-check_requirements "gcloud" "jq" "terraform"
+# Helper function for reading entry_point from index.ts (single source of truth)
+# Looks for: export const <functionName> = async
+# Usage: read_entry_point_from_index_ts "index_ts_path" "fallback"
+read_entry_point_from_index_ts() {
+	local index_ts="$1"
+	local fallback="$2"
 
-# Load project variables using existing script
-info "Loading project variables..."
-if [[ -f "${SCRIPT_DIR}/get-project-vars.sh" ]]; then
-	# Source the script to get variables (suppress output unless verbose)
-	if [[ ${VERBOSE:-0} -eq 1 ]]; then
-		source "${SCRIPT_DIR}/get-project-vars.sh" --verbose
-	else
-		source "${SCRIPT_DIR}/get-project-vars.sh" >/dev/null 2>&1
+	if [[ ! -f ${index_ts} ]]; then
+		echo "${fallback}"
+		return
 	fi
-else
-	error "get-project-vars.sh not found at ${SCRIPT_DIR}/get-project-vars.sh"
-	exit 1
-fi
 
-# Verify required variables are set
-if [[ -z ${project_id-} ]]; then
-	error "project_id not set. Run get-project-vars.sh first."
-	exit 1
-fi
+	# Extract exported function name from: export const <functionName> = async
+	local entry_point
+	entry_point=$(grep -E '^export const [a-zA-Z_][a-zA-Z0-9_]*\s*=\s*async' "${index_ts}" 2>/dev/null |
+		sed -E 's/^export const ([a-zA-Z_][a-zA-Z0-9_]*).*/\1/' | head -1)
 
-if [[ -z ${region-} ]]; then
-	warn "region not set, using default: europe-west1"
-	region="europe-west1"
-fi
-
-if [[ -z ${function_name-} ]]; then
-	warn "function_name not set, using default: onchain-event-handler"
-	function_name="onchain-event-handler"
-fi
-
-# Change to module directory
-cd "${MODULE_DIR}"
-
-# Ensure safe-abi.json exists (copy from root if needed)
-if [[ ! -f "${MODULE_DIR}/safe-abi.json" ]]; then
-	if [[ -f "${ROOT_DIR}/safe-abi.json" ]]; then
-		info "Copying safe-abi.json from project root..."
-		cp "${ROOT_DIR}/safe-abi.json" "${MODULE_DIR}/safe-abi.json"
+	if [[ -n ${entry_point} ]]; then
+		echo "${entry_point}"
 	else
-		error "safe-abi.json not found in project root: ${ROOT_DIR}/safe-abi.json"
-		exit 1
+		echo "${fallback}"
 	fi
-fi
+}
 
-# Note: We don't build locally - Cloud Build will run `npm install` and `npm run build`
-# when it detects package.json in the source directory
+# Extract environment variables from Terraform state (computed values)
+# Returns JSON object with env vars or empty object
+# Note: Environment variables are computed in Terraform, so we need state for these
+get_env_vars_from_state() {
+	local root_dir="$1"
+	cd "${root_dir}" || return 1
 
-# Get function configuration from Terraform (if available)
-# Try to read from terraform state/outputs
-info "Reading function configuration from Terraform..."
+	terraform show -json 2>/dev/null | jq -r '
+		.values.root_module.child_modules[]? |
+		select(.address == "module.onchain_event_handler") |
+		.resources[]? |
+		select(.type == "google_cloudfunctions2_function" and .name == "onchain_event_handler") |
+		.values.service_config[0].environment_variables // {}
+	' 2>/dev/null || echo "{}"
+}
 
-# Change to root directory to run terraform commands
-cd "${ROOT_DIR}"
+# Parse all function parameters from Terraform files and source code (single source of truth)
+# Reads from variables.tf and src/index.ts directly - no Terraform state required
+# Sets local variables: function_name, runtime, entry_point, memory_mb, timeout_seconds,
+#                       max_instances, min_instances, secret_name
+parse_function_config_from_files() {
+	local module_dir="$1"
+	local vars_file="${module_dir}/variables.tf"
 
-# Get function configuration values
-FUNCTION_NAME="${function_name}"
-REGION="${region}"
-PROJECT_ID="${project_id}"
-SERVICE_ACCOUNT_EMAIL="${service_account_email}"
-# Try to get memory, timeout, etc. from terraform state
-# Read from the actual resource in state
-FUNCTION_RESOURCE=$(terraform show -json 2>/dev/null | jq -r '
-  .values.root_module.child_modules[]? |
-  select(.address == "module.onchain_event_handler") |
-  .resources[]? |
-  select(.type == "google_cloudfunctions2_function" and .name == "onchain_event_handler")
-' 2>/dev/null || echo "{}")
+	# Read function name from variables.tf
+	function_name=$(read_tfvar "function_name" "${vars_file}")
 
-FUNCTION_CONFIG=$(echo "${FUNCTION_RESOURCE}" | jq -r '.values.service_config[0] // {}' 2>/dev/null || echo "{}")
+	# Read runtime from variables.tf
+	runtime=$(read_tfvar "runtime" "${vars_file}")
 
-# Extract values from state or use defaults
-if [[ ${FUNCTION_CONFIG} != "{}" && ${FUNCTION_CONFIG} != "null" ]]; then
-	MEMORY_MB=$(echo "${FUNCTION_CONFIG}" | jq -r '.available_memory // "256M"' | sed 's/M$//' || echo "256")
-	TIMEOUT_SECONDS=$(echo "${FUNCTION_CONFIG}" | jq -r '.timeout_seconds // 60' || echo "60")
-	MAX_INSTANCES=$(echo "${FUNCTION_CONFIG}" | jq -r '.max_instance_count // 10' || echo "10")
-	MIN_INSTANCES=$(echo "${FUNCTION_CONFIG}" | jq -r '.min_instance_count // 0' || echo "0")
-else
-	# Use defaults from variables.tf
-	warn "Could not read function config from Terraform state, using defaults"
-	MEMORY_MB="256"
-	TIMEOUT_SECONDS="60"
-	MAX_INSTANCES="10"
-	MIN_INSTANCES="0"
-fi
+	# Read entry point from index.ts (single source of truth - the actual exported function)
+	local index_ts="${module_dir}/src/index.ts"
+	entry_point=$(read_entry_point_from_index_ts "${index_ts}" "processQuicknodeWebhook")
 
-# Validate and sanitize numeric values to ensure they're valid
-# Handle cases where jq might return "null" as a string or empty values
-# Ensure TIMEOUT_SECONDS is a valid positive integer
-if [[ -z ${TIMEOUT_SECONDS} ]] || [[ ${TIMEOUT_SECONDS} == "null" ]] || [[ ! ${TIMEOUT_SECONDS} =~ ^[0-9]+$ ]]; then
-	warn "Invalid TIMEOUT_SECONDS value '${TIMEOUT_SECONDS}', using default: 60"
-	TIMEOUT_SECONDS="60"
-fi
+	# Read numeric values from variables.tf and validate
+	memory_mb=$(read_tfvar_default_number "memory_mb" "256" "${vars_file}")
+	timeout_seconds=$(read_tfvar_default_number "timeout_seconds" "60" "${vars_file}")
+	max_instances=$(read_tfvar_default_number "max_instances" "10" "${vars_file}")
+	min_instances=$(read_tfvar_default_number "min_instances" "0" "${vars_file}")
 
-# Ensure MEMORY_MB is a valid positive integer
-if [[ -z ${MEMORY_MB} ]] || [[ ${MEMORY_MB} == "null" ]] || [[ ! ${MEMORY_MB} =~ ^[0-9]+$ ]]; then
-	warn "Invalid MEMORY_MB value '${MEMORY_MB}', using default: 256"
-	MEMORY_MB="256"
-fi
+	# Read secret name from variables.tf
+	secret_name=$(read_tfvar "secret_name" "${vars_file}")
 
-# Ensure MAX_INSTANCES is a valid non-negative integer
-if [[ -z ${MAX_INSTANCES} ]] || [[ ${MAX_INSTANCES} == "null" ]] || [[ ! ${MAX_INSTANCES} =~ ^[0-9]+$ ]]; then
-	warn "Invalid MAX_INSTANCES value '${MAX_INSTANCES}', using default: 10"
-	MAX_INSTANCES="10"
-fi
+	# Validate numeric values (using shared function from common.sh)
+	memory_mb=$(validate_non_negative_int "${memory_mb}" "256" "memory_mb")
+	timeout_seconds=$(validate_non_negative_int "${timeout_seconds}" "60" "timeout_seconds")
+	max_instances=$(validate_non_negative_int "${max_instances}" "10" "max_instances")
+	min_instances=$(validate_non_negative_int "${min_instances}" "0" "min_instances")
+}
 
-# Ensure MIN_INSTANCES is a valid non-negative integer
-if [[ -z ${MIN_INSTANCES} ]] || [[ ${MIN_INSTANCES} == "null" ]] || [[ ! ${MIN_INSTANCES} =~ ^[0-9]+$ ]]; then
-	warn "Invalid MIN_INSTANCES value '${MIN_INSTANCES}', using default: 0"
-	MIN_INSTANCES="0"
-fi
+# Create temporary YAML file for environment variables
+# Returns path to temp file via stdout, returns 1 on failure
+# The caller is responsible for cleanup (use trap)
+create_env_vars_file() {
+	local env_vars_json="$1"
 
-# Get environment variables from terraform state
-info "Reading environment variables from Terraform state..."
+	if [[ ${env_vars_json} == "{}" ]] || [[ ${env_vars_json} == "null" ]] || [[ -z ${env_vars_json} ]]; then
+		return 1
+	fi
 
-# Try to read environment variables from terraform state
-ENV_VARS_JSON=$(cd "${ROOT_DIR}" && terraform show -json 2>/dev/null | jq -r '
-  .values.root_module.child_modules[]? |
-  select(.address == "module.onchain_event_handler") |
-  .resources[]? |
-  select(.type == "google_cloudfunctions2_function" and .name == "onchain_event_handler") |
-  .values.service_config[0].environment_variables // {}
-' 2>/dev/null || echo "{}")
-
-# Build gcloud deploy command
-cd "${MODULE_DIR}"
-
-info "Deploying Cloud Function: ${FUNCTION_NAME}"
-info "Project: ${PROJECT_ID}"
-info "Region: ${REGION}"
-info "Memory: ${MEMORY_MB}MB"
-info "Timeout: ${TIMEOUT_SECONDS}s"
-
-# Prepare environment variables
-# Write to a YAML file to avoid shell parsing issues with special characters (JSON, commas, colons, etc.)
-ENV_VARS_FILE=""
-if [[ ${ENV_VARS_JSON} != "{}" && ${ENV_VARS_JSON} != "null" && -n ${ENV_VARS_JSON} ]]; then
-	# Create temporary YAML file for environment variables
-	# gcloud functions deploy supports --env-vars-file with YAML format
-	ENV_VARS_FILE=$(mktemp)
-	# Cleanup function for trap
-	cleanup_env_file() {
-		rm -f "${ENV_VARS_FILE}"
-	}
-	trap cleanup_env_file EXIT
+	local env_file
+	env_file=$(mktemp)
 
 	# Convert JSON to YAML format
 	# Format: KEY: "VALUE" (values quoted to handle special characters)
-	# Escape quotes in values and wrap in quotes
-	echo "${ENV_VARS_JSON}" | jq -r 'to_entries[] | "\(.key): \(.value | @json)"' >"${ENV_VARS_FILE}" 2>/dev/null
-
-	if [[ -s ${ENV_VARS_FILE} ]]; then
-		ENV_VAR_COUNT=$(echo "${ENV_VARS_JSON}" | jq 'length' 2>/dev/null || echo "0")
-		info "Found ${ENV_VAR_COUNT} environment variables in Terraform state"
-	else
+	if ! echo "${env_vars_json}" | jq -r 'to_entries[] | "\(.key): \(.value | @json)"' >"${env_file}" 2>/dev/null; then
 		warn "Could not parse environment variables from Terraform state"
-		rm -f "${ENV_VARS_FILE}"
-		ENV_VARS_FILE=""
+		rm -f "${env_file}"
+		return 1
 	fi
-else
-	warn "Could not read environment variables from Terraform state"
-	warn "The function may not have the correct environment variables set"
-	warn "You may need to set them manually or deploy via Terraform first"
-fi
 
-# Secret environment variable
-SECRET_NAME="quicknode-signing-secret"
-SECRET_VERSION="latest"
+	if [[ ! -s ${env_file} ]]; then
+		rm -f "${env_file}"
+		return 1
+	fi
 
-# Build the gcloud deploy command as an array to properly handle special characters
-# Cloud Build will automatically run `npm install` and `npm run build` when it detects package.json
-DEPLOY_CMD_ARGS=(
-	"functions" "deploy" "${FUNCTION_NAME}"
-	"--gen2"
-	"--runtime=nodejs22"
-	"--region=${REGION}"
-	"--source=${MODULE_DIR}"
-	"--service-account=${SERVICE_ACCOUNT_EMAIL}"
-	"--entry-point=processQuicknodeWebhook"
-	"--trigger-http"
-	"--allow-unauthenticated"
-	"--memory=${MEMORY_MB}MB"
-	"--timeout=${TIMEOUT_SECONDS}s"
-	"--max-instances=${MAX_INSTANCES}"
-	"--min-instances=${MIN_INSTANCES}"
-	"--set-secrets=QUICKNODE_SIGNING_SECRET=${SECRET_NAME}:${SECRET_VERSION}"
-)
+	local env_var_count
+	env_var_count=$(echo "${env_vars_json}" | jq 'length' 2>/dev/null || echo "0")
+	info "Found ${env_var_count} environment variables in Terraform state"
 
-# Add environment variables if we have them
-# Use --env-vars-file to avoid shell parsing issues with special characters
-if [[ -n ${ENV_VARS_FILE} && -f ${ENV_VARS_FILE} ]]; then
-	DEPLOY_CMD_ARGS+=("--env-vars-file=${ENV_VARS_FILE}")
-fi
+	echo "${env_file}"
+}
 
-info "Deployment command:"
-echo "gcloud ${DEPLOY_CMD_ARGS[*]}"
-echo ""
+# Ensure safe-abi.json exists in module directory
+ensure_safe_abi() {
+	if [[ -f "${MODULE_DIR}/safe-abi.json" ]]; then
+		return 0
+	fi
 
-# Execute deployment
-info "Starting deployment..."
-if gcloud "${DEPLOY_CMD_ARGS[@]}"; then
-	info "Deployment successful!"
-	info "Getting function URL..."
-	FUNCTION_URL=$(gcloud functions describe "${FUNCTION_NAME}" --gen2 --region="${REGION}" --format="value(serviceConfig.uri)" 2>/dev/null || echo "")
-	if [[ -n ${FUNCTION_URL} ]]; then
-		info "Function URL: ${FUNCTION_URL}"
+	if [[ -f "${ROOT_DIR}/safe-abi.json" ]]; then
+		info "Copying safe-abi.json from project root..."
+		cp "${ROOT_DIR}/safe-abi.json" "${MODULE_DIR}/safe-abi.json"
+		return 0
+	fi
+
+	error "safe-abi.json not found in project root: ${ROOT_DIR}/safe-abi.json"
+	return 1
+}
+
+# Get function URL after deployment
+get_function_url() {
+	local function_name="$1"
+	local region="$2"
+	local impersonate_sa="$3"
+
+	local url
+	if [[ -n ${impersonate_sa} ]]; then
+		url=$(gcloud functions describe "${function_name}" --gen2 --region="${region}" --impersonate-service-account="${impersonate_sa}" --format="value(serviceConfig.uri)" 2>/dev/null || echo "")
+	else
+		url=$(gcloud functions describe "${function_name}" --gen2 --region="${region}" --format="value(serviceConfig.uri)" 2>/dev/null || echo "")
+	fi
+
+	if [[ -n ${url} ]]; then
+		info "Function URL: ${url}"
 	else
 		warn "Could not retrieve function URL. You can get it with:"
-		warn "  gcloud functions describe ${FUNCTION_NAME} --gen2 --region=${REGION} --format='value(serviceConfig.uri)'"
+		if [[ -n ${impersonate_sa} ]]; then
+			warn "  gcloud functions describe ${function_name} --gen2 --region=${region} --impersonate-service-account=${impersonate_sa} --format='value(serviceConfig.uri)'"
+		else
+			warn "  gcloud functions describe ${function_name} --gen2 --region=${region} --format='value(serviceConfig.uri)'"
+		fi
 	fi
-else
-	error "Deployment failed"
-	exit 1
-fi
+}
+
+# Main deployment function
+main() {
+	# Check tools first
+	check_tools "gcloud" "jq" "terraform"
+
+	# Load project variables using existing script
+	info "Loading project variables..."
+	if [[ -f "${SCRIPT_DIR}/get-project-vars.sh" ]]; then
+		# Source the script to get variables (suppress output unless verbose)
+		if [[ ${VERBOSE:-0} -eq 1 ]]; then
+			source "${SCRIPT_DIR}/get-project-vars.sh" --verbose
+		else
+			source "${SCRIPT_DIR}/get-project-vars.sh" >/dev/null 2>&1
+		fi
+	else
+		error "get-project-vars.sh not found at ${SCRIPT_DIR}/get-project-vars.sh"
+		exit 1
+	fi
+
+	# Ensure safe-abi.json exists
+	local ensure_result
+	ensure_safe_abi
+	ensure_result=$?
+	if [[ ${ensure_result} -ne 0 ]]; then
+		exit 1
+	fi
+
+	# Parse all function parameters from Terraform files (single source of truth)
+	info "Reading function configuration from Terraform files..."
+	local function_name runtime entry_point memory_mb timeout_seconds max_instances min_instances secret_name
+	# Initialize with defaults to avoid unbound variable errors
+	function_name=""
+	runtime=""
+	entry_point="processQuicknodeWebhook"
+	memory_mb="256"
+	timeout_seconds="60"
+	max_instances="10"
+	min_instances="0"
+	secret_name=""
+	parse_function_config_from_files "${MODULE_DIR}"
+
+	# Read terraform_service_account from root variables.tf for impersonation
+	local terraform_service_account
+	terraform_service_account=$(read_tfvar "terraform_service_account" "${ROOT_DIR}/variables.tf")
+
+	# Get environment variables from Terraform state (computed values)
+	# Note: Environment variables are computed in Terraform, so we need state for these
+	info "Reading environment variables from Terraform state..."
+	cd "${ROOT_DIR}"
+	local env_vars_json
+	env_vars_json=$(get_env_vars_from_state "${ROOT_DIR}")
+
+	# Create environment variables file if we have env vars
+	local env_vars_file=""
+	local create_result
+	env_vars_file=$(create_env_vars_file "${env_vars_json}")
+	create_result=$?
+	if [[ ${create_result} -eq 0 ]] && [[ -n ${env_vars_file} ]]; then
+		# Set up cleanup trap for temporary file
+		# Store the file path in a way that's accessible to the trap
+		local cleanup_file="${env_vars_file}"
+		cleanup_env_file() {
+			if [[ -n ${cleanup_file-} ]] && [[ -f ${cleanup_file} ]]; then
+				rm -f "${cleanup_file}"
+			fi
+		}
+		trap cleanup_env_file EXIT INT TERM
+	else
+		warn "Could not read environment variables from Terraform state"
+		warn "The function may not have the correct environment variables set"
+		warn "You may need to set them manually or deploy via Terraform first"
+	fi
+
+	# Change to module directory for deployment
+	cd "${MODULE_DIR}"
+
+	# Display deployment information with better formatting
+	echo ""
+	echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+	echo -e "${CYAN}  Deployment Configuration${NC}"
+	echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+	echo ""
+	echo -e "  ${GREEN}Function:${NC}     ${function_name}"
+	echo -e "  ${GREEN}Project:${NC}      ${project_id}"
+	echo -e "  ${GREEN}Region:${NC}       ${region}"
+	echo -e "  ${GREEN}Runtime:${NC}      ${runtime}"
+	echo -e "  ${GREEN}Entry Point:${NC}  ${entry_point}"
+	echo ""
+	echo -e "  ${GREEN}Memory:${NC}        ${memory_mb}MB"
+	echo -e "  ${GREEN}Timeout:${NC}      ${timeout_seconds}s"
+	echo -e "  ${GREEN}Instances:${NC}    ${min_instances} - ${max_instances}"
+	echo ""
+	echo -e "  ${GREEN}Secret:${NC}       ${secret_name}"
+	echo -e "  ${GREEN}Impersonating:${NC} ${terraform_service_account}"
+	echo ""
+
+	# Build the gcloud deploy command as an array to properly handle special characters
+	# Cloud Build will automatically run `npm install` and `npm run build` when it detects package.json
+	# All parameters come from Terraform files (single source of truth)
+	local deploy_cmd_args=(
+		"functions" "deploy" "${function_name}"
+		"--gen2"
+		"--runtime=${runtime}"
+		"--region=${region}"
+		"--source=${MODULE_DIR}"
+		"--service-account=${service_account_email}"
+		"--entry-point=${entry_point}"
+		"--trigger-http"
+		"--allow-unauthenticated"
+		"--memory=${memory_mb}MB"
+		"--timeout=${timeout_seconds}s"
+		"--max-instances=${max_instances}"
+		"--min-instances=${min_instances}"
+		"--set-secrets=QUICKNODE_SIGNING_SECRET=${secret_name}:latest"
+		"--impersonate-service-account=${terraform_service_account}"
+	)
+
+	# Add environment variables if we have them
+	if [[ -n ${env_vars_file} ]] && [[ -f ${env_vars_file} ]]; then
+		deploy_cmd_args+=("--env-vars-file=${env_vars_file}")
+	fi
+
+	# Display deployment command in a more readable format
+	echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+	echo -e "${CYAN}  Deployment Command${NC}"
+	echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+	echo ""
+	echo -e "${BLUE}gcloud${NC} ${deploy_cmd_args[*]}"
+	echo ""
+
+	# Execute deployment
+	echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+	info "Starting deployment..."
+	echo ""
+	if gcloud "${deploy_cmd_args[@]}"; then
+		info "Deployment successful!"
+		info "Getting function URL..."
+		get_function_url "${function_name}" "${region}" "${terraform_service_account}"
+	else
+		error "Deployment failed"
+		exit 1
+	fi
+}
+
+main "$@"

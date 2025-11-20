@@ -5,7 +5,7 @@ import type { Request } from "@google-cloud/functions-framework";
  */
 const MAX_PAYLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 
-export interface PayloadSizeCheck {
+interface PayloadSizeCheck {
   valid: boolean;
   size: number;
   maxSize: number;

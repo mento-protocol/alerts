@@ -6,6 +6,7 @@
  */
 
 import crypto from "crypto";
+import { logger } from "./logger";
 
 /**
  * Maximum allowed timestamp difference in milliseconds (±5 minutes)
@@ -44,7 +45,7 @@ export function verifyQuickNodeSignature(
   const diff = Math.abs(now - timestampMs);
 
   if (diff > MAX_TIMESTAMP_DIFF_MS) {
-    console.warn("Timestamp validation failed", {
+    logger.warn("Timestamp validation failed", {
       timestamp,
       timestampMs,
       now,

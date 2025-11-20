@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "ignore": [
+    ".trunk/**",
+    "commitlint.config.mjs",
+    "onchain-event-handler/vitest.config.ts"
+  ],
+  "workspaces": {
+    "onchain-event-handler": {
+      "ignoreBinaries": ["terraform"]
+    },
+    "scripts": {}
+  }
+}

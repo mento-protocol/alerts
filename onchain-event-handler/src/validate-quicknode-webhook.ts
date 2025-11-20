@@ -1,8 +1,9 @@
 import type { Request } from "@google-cloud/functions-framework";
-import { config } from "./config";
+import config from "./config";
+import { logger } from "./logger";
 import { verifyQuickNodeSignature } from "./verify-quicknode-signature";
 
-export type ValidationResult =
+type ValidationResult =
   | { valid: true }
   | { valid: false; status: number; message: string; error?: unknown };
 
@@ -22,7 +23,7 @@ export function validateQuickNodeWebhook(req: Request): ValidationResult {
   const secret = config.QUICKNODE_SIGNING_SECRET;
 
   if (!secret) {
-    console.error("QUICKNODE_SIGNING_SECRET is not configured");
+    logger.error("QUICKNODE_SIGNING_SECRET is not configured");
     return {
       valid: false,
       status: 500,
@@ -32,7 +33,7 @@ export function validateQuickNodeWebhook(req: Request): ValidationResult {
 
   // Validate required headers are present
   if (!nonce || !timestamp || !signature) {
-    console.warn("Missing required QuickNode headers", {
+    logger.warn("Missing required QuickNode headers", {
       headers: Object.keys(req.headers),
       hasNonce: !!nonce,
       hasTimestamp: !!timestamp,
@@ -62,7 +63,7 @@ export function validateQuickNodeWebhook(req: Request): ValidationResult {
 
   // Verify signature
   if (!verifyQuickNodeSignature(secret, payload, nonce, timestamp, signature)) {
-    console.error("Invalid webhook signature", {
+    logger.error("Invalid webhook signature", {
       hasSecret: !!secret,
       hasNonce: !!nonce,
       hasTimestamp: !!timestamp,

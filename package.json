@@ -2,9 +2,8 @@
   "name": "alerts",
   "version": "1.0.0",
   "description": "This repository manages alert rules for monitoring Mento's infrastructure using Terraform.",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "knip": "knip"
   },
   "repository": {
     "type": "git",
@@ -19,6 +18,7 @@
   "homepage": "https://github.com/mento-protocol/alerts#readme",
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "knip": "^5.70.0",
     "typescript-eslint": "^8.46.4"
   }
 }

@@ -1,5 +1,5 @@
 import { Response } from "@google-cloud/functions-framework";
-import { config } from "./config";
+import config from "./config";
 import { MULTISIGS } from "./constants";
 
 /**

@@ -19,7 +19,7 @@ Each script includes comprehensive header documentation. See the script file its
 
 - **`get-project-vars.sh`** - Load and cache project variables
 - **`deploy.sh`** - Deploy Cloud Function directly via gcloud
-- **`get-function-logs.sh`** - View Cloud Function logs
+- **`get-logs.sh`** - View Cloud Function logs
 - **`test-local.sh`** - Test locally running Cloud Function
 
 ### TypeScript Scripts
@@ -58,9 +58,7 @@ cd onchain-event-handler
 
 ```bash
 cd onchain-event-handler
-./scripts/get-function-logs.sh
-# Or filter by rate feed:
-./scripts/get-function-logs.sh CELO/USD
+./scripts/get-logs.sh
 ```
 
 ## Script Details

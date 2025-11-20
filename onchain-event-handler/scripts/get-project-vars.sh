@@ -45,56 +45,52 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ROOT_DIR="$(cd "${MODULE_DIR}/.." && pwd)"
 
+# Source common utilities
+# shellcheck source=../../scripts/common.sh
+source "${ROOT_DIR}/scripts/common.sh"
+
 set_project_id() {
-	printf "Looking up project name in variables.tf..."
-	project_name=$(awk '/variable "project_name"/{f=1} f==1&&/default/{print $3; exit}' "${ROOT_DIR}/variables.tf" | tr -d '",')
-	printf ' \033[1m%s\033[0m\n' "${project_name}"
+	project_name=$(read_tfvar "project_name" "${ROOT_DIR}/variables.tf")
 
-	printf "Fetching the project ID..."
-	project_id=$(gcloud projects list --filter="name:${project_name}" --format="value(projectId)")
-
-	if [[ -z ${project_id} ]]; then
-		printf '\n\033[1;31mError: No project found with name "%s"\033[0m\n' "${project_name}"
-		echo "This usually means the GCP project hasn't been created yet."
-		echo "Please ensure you've run the terraform apply in the root directory first."
+	if [[ -z ${project_name} ]]; then
+		error "Could not read project_name from ${ROOT_DIR}/variables.tf"
 		exit 1
 	fi
 
-	printf ' \033[1m%s\033[0m\n' "${project_id}"
+	info "Looking up project name: ${project_name}"
+
+	project_id=$(gcloud projects list --filter="name:${project_name}" --format="value(projectId)")
+
+	if [[ -z ${project_id} ]]; then
+		error "No project found with name '${project_name}'"
+		error "This usually means the GCP project hasn't been created yet."
+		error "Please ensure you've run the terraform apply in the root directory first."
+		exit 1
+	fi
+
+	info "Found project ID: ${project_id}"
 
 	# Set your local default project
-	printf "Setting your default project to \033[1m%s\033[0m...\n" "${project_id}"
-	{
-		output=$(gcloud config set project "${project_id}" 2>&1 >/dev/null)
-		status=$?
-	}
-	if [[ ${status} -ne 0 ]]; then
-		printf '\n\033[1;31mError setting gcloud project: %s\033[0m\n' "${output}"
-		exit "${status}"
+	info "Setting default gcloud project to ${project_id}..."
+	if ! gcloud config set project "${project_id}" &>/dev/null; then
+		error "Failed to set gcloud project"
+		exit 1
 	fi
 
-	# Set the quota project to the governance-watchdog project, some gcloud commands require this to be set
-	printf "Setting the quota project to \033[1m%s\033[0m...\n" "${project_id}"
-	{
-		output=$(gcloud auth application-default set-quota-project "${project_id}" 2>&1 >/dev/null)
-		status=$?
-	}
-	if [[ ${status} -ne 0 ]]; then
-		printf '\n\033[1;31mError setting quota project: %s\033[0m\n' "${output}"
-		exit "${status}"
+	# Set the quota project
+	info "Setting quota project to ${project_id}..."
+	if ! gcloud auth application-default set-quota-project "${project_id}" &>/dev/null; then
+		error "Failed to set quota project"
+		exit 1
 	fi
 
-	# Update the project ID in your .env file so your cloud function points to the correct project when running locally
-	printf "Updating the project ID in your .env file..."
-	# Check if .env file exists
+	# Update the project ID in your .env file
+	info "Updating .env file with project ID..."
 	if [[ ! -f "${MODULE_DIR}/.env" ]]; then
-		# If .env doesn't exist, create it with the initial value
 		echo "GCP_PROJECT_ID=${project_id}" >"${MODULE_DIR}/.env"
 	else
-		# If .env exists, perform the sed replacement
 		sed -i '' "s/^GCP_PROJECT_ID=.*/GCP_PROJECT_ID=${project_id}/" "${MODULE_DIR}/.env"
 	fi
-	printf "✅"
 }
 
 cache_file="${MODULE_DIR}/.project_vars_cache"
@@ -122,39 +118,39 @@ write_cache() {
 	} >"${cache_file}"
 }
 
+# Read entry point from main.tf (shared helper)
+read_entry_point_from_main_tf() {
+	local main_tf="$1"
+	local fallback="$2"
+	read_tf_main_value "${main_tf}" '/build_config/{f=1} f==1&&/entry_point.*=/{gsub(/[^"]*"|".*/, ""); print; exit}' "${fallback}"
+}
+
 # Function to load & cache values
 cache_values() {
 	# Ensure we're in the root directory for terraform commands
 	cd "${ROOT_DIR}" || exit 1
 
-	printf "Loading and caching project values...\n\n"
+	info "Loading and caching project values..."
 
-	printf " - Project Name:"
-	project_name=$(awk '/variable "project_name"/{f=1} f==1&&/default/{print $3; exit}' "${ROOT_DIR}/variables.tf" | tr -d '",')
-	printf ' \033[1m%s\033[0m\n' "${project_name}"
+	project_name=$(read_tfvar "project_name" "${ROOT_DIR}/variables.tf")
+	region=$(read_tfvar "region" "${ROOT_DIR}/variables.tf")
+	function_name=$(read_tfvar "function_name" "${MODULE_DIR}/variables.tf")
 
-	printf " - Region:"
-	region=$(awk '/variable "region"/{f=1} f==1&&/default/{print $3; exit}' "${ROOT_DIR}/variables.tf" | tr -d '",')
-	printf ' \033[1m%s\033[0m\n' "${region}"
+	info "  Project Name: ${project_name}"
+	info "  Region: ${region}"
+	info "  Function Name: ${function_name}"
 
-	printf " - Service Account:"
+	# Service account from Terraform state
 	service_account_email=$(terraform state show "google_service_account.project_sa" 2>/dev/null | grep email | awk '{print $3}' | tr -d '"' || echo "")
-	printf ' \033[1m%s\033[0m\n' "${service_account_email}"
+	info "  Service Account: ${service_account_email:-<not found>}"
 
-	printf " - Function Name:"
-	function_name=$(awk '/variable "function_name"/{f=1} f==1&&/default/{print $3; exit}' "${MODULE_DIR}/variables.tf" | tr -d '",')
-	printf ' \033[1m%s\033[0m\n' "${function_name}"
+	# Entry point from main.tf (using shared function)
+	function_entry_point=$(read_entry_point_from_main_tf "${MODULE_DIR}/main.tf" "processQuicknodeWebhook")
+	info "  Function Entry Point: ${function_entry_point}"
 
-	printf " - Function Entry Point:"
-	# Function entry point is hardcoded in main.tf, not a variable
-	function_entry_point="processQuicknodeWebhook"
-	printf ' \033[1m%s\033[0m\n' "${function_entry_point}"
-
-	printf "\nCaching values in"
-	printf ' \033[1m%s\033[0m...' "${cache_file}"
+	info "Caching values in ${cache_file}..."
 	write_cache
-
-	printf "✅\n\n"
+	info "Cache updated successfully"
 }
 
 # Function to invalidate cache
@@ -162,25 +158,21 @@ invalidate_cache() {
 	# Ensure we're in the root directory for terraform commands
 	cd "${ROOT_DIR}" || exit 1
 
-	printf "Clearing local cache file %s..." "${cache_file}"
+	info "Clearing cache file: ${cache_file}"
 	rm -f "${cache_file}"
-	printf " ✅\n"
 
-	printf "Loading current local gcloud project ID:"
-	current_local_project_id=$(gcloud config get project)
-	printf ' \033[1m%s\033[0m\n' "${current_local_project_id}"
+	current_local_project_id=$(gcloud config get project 2>/dev/null || echo "")
+	info "Current gcloud project: ${current_local_project_id:-<not set>}"
 
-	printf "Comparing with project ID from terraform state:"
-	current_tf_state_project_id=$(terraform state show module.project_factory.google_project.main 2>/dev/null | grep project_id | awk '{print $3}' | tr -d '"' || echo "Not found")
-	printf ' \033[1m%s\033[0m\n' "${current_tf_state_project_id}"
+	current_tf_state_project_id=$(terraform state show module.project_factory.google_project.main 2>/dev/null | grep project_id | awk '{print $3}' | tr -d '"' || echo "")
+	info "Terraform state project: ${current_tf_state_project_id:-<not found>}"
 
-	if [[ ${current_local_project_id} != "${current_tf_state_project_id}" ]]; then
-		printf '️\n🚨 Your local gcloud is set to the wrong project: \033[1m%s\033[0m 🚨\n' "${current_local_project_id}"
-		printf "\nTrying to set the correct project ID...\n\n"
+	if [[ -n ${current_local_project_id} ]] && [[ -n ${current_tf_state_project_id} ]] && [[ ${current_local_project_id} != "${current_tf_state_project_id}" ]]; then
+		warn "Local gcloud project (${current_local_project_id}) differs from Terraform state (${current_tf_state_project_id})"
+		info "Setting correct project ID..."
 		set_project_id
-		printf "\n\n"
 	else
-		project_id="${current_local_project_id}"
+		project_id="${current_local_project_id:-${current_tf_state_project_id}}"
 	fi
 
 	cache_values
@@ -207,33 +199,24 @@ main() {
 
 	if [[ ${cache_loaded} -eq 0 ]]; then
 		if [[ ${VERBOSE:-0} -eq 1 ]]; then
-			printf "Using cached values from %s:\n" "${cache_file}"
-			printf " - Project ID: \033[1m%s\033[0m\n" "${project_id}"
-			printf " - Project Name: \033[1m%s\033[0m\n" "${project_name}"
-			printf " - Region: \033[1m%s\033[0m\n" "${region}"
-			printf " - Service Account: \033[1m%s\033[0m\n" "${service_account_email}"
-			printf " - Function Name: \033[1m%s\033[0m\n" "${function_name}"
-			printf " - Function Entry Point: \033[1m%s\033[0m\n" "${function_entry_point}"
+			info "Using cached values from ${cache_file}:"
+			info "  Project ID: ${project_id}"
+			info "  Project Name: ${project_name}"
+			info "  Region: ${region}"
+			info "  Service Account: ${service_account_email}"
+			info "  Function Name: ${function_name}"
+			info "  Function Entry Point: ${function_entry_point}"
 		else
-			# Calculate the length for proper box sizing
-			env_text="Project ID: ${project_id}"
-			text_length=${#env_text}
-
-			# Create box border (minimum 60 chars wide)
-			box_width=$((text_length > 60 ? text_length + 4 : 64))
+			# Simple box display for non-verbose mode
+			local box_width=$((${#project_id} + 18))
+			local border
 			border=$(printf '%*s' "${box_width}" '' | tr ' ' '-')
-
-			printf "\n"
-			printf "+%s+\n" "${border}"
-			printf "| \033[1mProject ID:\033[0m %s" "${project_id}"
-
-			# Calculate padding to align closing pipe
-			padding=$((box_width - text_length - 1))
-			printf "%*s|\n" "${padding}" ""
+			printf "\n+%s+\n" "${border}"
+			printf "| Project ID: %s |\n" "${project_id}"
 			printf "+%s+\n" "${border}"
 		fi
 	else
-		printf "⚠️ No cache found. Setting project Id and fetching values...\n\n"
+		warn "No cache found. Setting project ID and fetching values..."
 		# Ensure we're in the root directory for terraform commands
 		cd "${ROOT_DIR}" || exit 1
 		set_project_id

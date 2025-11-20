@@ -2,6 +2,7 @@ import { Request, Response } from "@google-cloud/functions-framework";
 import { buildEventContext } from "./build-event-context";
 import { checkPayloadSize } from "./check-payload-size";
 import { handleHealthCheck } from "./health-check";
+import { logger } from "./logger";
 import { processEvents } from "./process-events";
 import { validatePayload } from "./validate-payload";
 import { validateQuickNodeWebhook } from "./validate-quicknode-webhook";
@@ -23,7 +24,7 @@ export const processQuicknodeWebhook = async (
     // 1. Check payload size
     const payloadSizeCheck = checkPayloadSize(req);
     if (!payloadSizeCheck.valid) {
-      console.warn("Payload size exceeded", {
+      logger.warn("Payload size exceeded", {
         payloadSize: payloadSizeCheck.size,
         maxSize: payloadSizeCheck.maxSize,
       });
@@ -40,7 +41,7 @@ export const processQuicknodeWebhook = async (
     if (isProduction) {
       const requestValidation = validateQuickNodeWebhook(req);
       if (!requestValidation.valid) {
-        console.warn("Webhook validation failed", {
+        logger.warn("Webhook validation failed", {
           status: requestValidation.status,
           message: requestValidation.message,
         });
@@ -52,7 +53,7 @@ export const processQuicknodeWebhook = async (
     // 3. Validate payload structure
     const payloadValidation = validatePayload(req);
     if (!payloadValidation.valid) {
-      console.warn("Payload validation failed", {
+      logger.warn("Payload validation failed", {
         status: payloadValidation.status,
         error: payloadValidation.error,
       });
@@ -61,7 +62,7 @@ export const processQuicknodeWebhook = async (
     }
 
     const webhookData = payloadValidation.payload.result;
-    console.info("Processing webhook", {
+    logger.info("Processing webhook", {
       logCount: webhookData.length,
     });
 
@@ -72,7 +73,7 @@ export const processQuicknodeWebhook = async (
     // 5. Process events with complete context
     const results = await processEvents(webhookData, context);
 
-    console.info("Webhook processing completed", {
+    logger.info("Webhook processing completed", {
       processed: results.length,
       total: webhookData.length,
     });
@@ -83,7 +84,7 @@ export const processQuicknodeWebhook = async (
       total: webhookData.length,
     });
   } catch (error) {
-    console.error("Webhook processing error", {
+    logger.error("Webhook processing error", {
       error:
         error instanceof Error
           ? {

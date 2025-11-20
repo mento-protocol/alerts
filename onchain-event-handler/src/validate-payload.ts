@@ -1,7 +1,8 @@
 import type { Request } from "@google-cloud/functions-framework";
+import { logger } from "./logger";
 import type { QuickNodeWebhookPayload } from "./types";
 
-export type PayloadValidationResult =
+type PayloadValidationResult =
   | { valid: true; payload: QuickNodeWebhookPayload }
   | { valid: false; status: number; error: { error: string } };
 
@@ -21,7 +22,7 @@ export function validatePayload(req: Request): PayloadValidationResult {
     !webhookData.result ||
     !Array.isArray(webhookData.result)
   ) {
-    console.error("Invalid webhook payload: missing or invalid result array", {
+    logger.error("Invalid webhook payload: missing or invalid result array", {
       body: req.body,
     });
     return {

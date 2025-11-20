@@ -7,11 +7,11 @@ import { celo, mainnet } from "viem/chains";
 import config from "./config";
 import {
   DEFAULT_TOKEN_DECIMALS,
-  EVENT_SIGNATURES,
   MULTISIGS,
   SECURITY_EVENTS,
   getChainConfig,
 } from "./constants";
+import { logger } from "./logger";
 import type { DiscordEmbedField, QuickNodeDecodedLog } from "./types";
 
 /**
@@ -21,13 +21,6 @@ const VIEM_CHAINS: Record<string, typeof celo | typeof mainnet> = {
   celo,
   ethereum: mainnet,
 };
-
-/**
- * Get event name from log topic0
- */
-export function getEventName(topic0: string): string | null {
-  return EVENT_SIGNATURES[topic0] || null;
-}
 
 /**
  * Get multisig key from contract address
@@ -162,16 +155,14 @@ export async function extractSignersFromSignatures(
           signers.push(recoveredAddress.toLowerCase());
         } catch (error) {
           // If recovery fails, skip this signature
-          // Note: Using console.warn here as this is a utility function without logger context
-          console.warn(
+          logger.warn(
             `Failed to recover address from signature at offset ${i}:`,
-            error,
+            { error: error instanceof Error ? error.message : String(error) },
           );
         }
       } else {
         // Unknown v value, skip this signature
-        // Note: Using console.warn here as this is a utility function without logger context
-        console.warn(
+        logger.warn(
           `Unknown v value ${vByte} at offset ${i}, skipping signature`,
         );
       }
@@ -180,8 +171,9 @@ export async function extractSignersFromSignatures(
       i += 130;
     }
   } catch (error) {
-    // Note: Using console.warn here as this is a utility function without logger context
-    console.warn("Failed to extract signers from signatures:", error);
+    logger.warn("Failed to extract signers from signatures", {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   return signers;
@@ -233,13 +225,6 @@ export async function decodeEventData(
 }
 
 /**
- * Format transaction hash for display
- */
-export function formatTxHash(hash: string): string {
-  return `${hash.slice(0, 10)}...`;
-}
-
-/**
  * Get the executor address (from) of a transaction
  * @param transactionHash - The transaction hash to look up
  * @param chainName - The chain name (e.g., "celo", "ethereum")
@@ -252,13 +237,13 @@ export async function getTransactionExecutor(
   try {
     const chainConfig = getChainConfig(chainName);
     if (!chainConfig) {
-      console.warn(`Unknown chain: ${chainName}`);
+      logger.warn(`Unknown chain: ${chainName}`);
       return null;
     }
 
     const viemChain = VIEM_CHAINS[chainName.toLowerCase()];
     if (!viemChain) {
-      console.warn(`No viem chain config for: ${chainName}`);
+      logger.warn(`No viem chain config for: ${chainName}`);
       return null;
     }
 
@@ -273,11 +258,9 @@ export async function getTransactionExecutor(
 
     return tx.from.toLowerCase();
   } catch (error) {
-    // Note: Using console.warn here as this is a utility function without logger context
-    console.warn(
-      `Failed to fetch transaction executor for ${transactionHash}:`,
-      error,
-    );
+    logger.warn(`Failed to fetch transaction executor for ${transactionHash}`, {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 }

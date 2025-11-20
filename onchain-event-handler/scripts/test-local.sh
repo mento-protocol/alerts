@@ -48,7 +48,7 @@ fi
 source "${ROOT_DIR}/scripts/common.sh"
 
 # Check requirements
-check_requirements "curl"
+check_tools "curl"
 
 FUNCTION_URL="${FUNCTION_URL:-http://localhost:8080/}"
 PAYLOAD_FILE="${SCRIPT_DIR}/test-payload.json"

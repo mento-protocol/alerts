@@ -4,6 +4,7 @@
 
 import axios, { AxiosError } from "axios";
 import { DISCORD_COLORS, DISCORD_WEBHOOK_TIMEOUT_MS } from "./constants";
+import { logger } from "./logger";
 import type { DiscordMessage, QuickNodeDecodedLog } from "./types";
 import {
   decodeEventData,
@@ -32,11 +33,16 @@ export async function formatDiscordMessage(
   const color = isSecurity ? DISCORD_COLORS.ALERT : DISCORD_COLORS.EVENT;
   const multisigName = getMultisigName(multisigKey);
 
-  // Get chain info and capitalize chain name
+  // Get chain info - fail if not found
   const chainInfo = getMultisigChainInfo(multisigKey);
-  const chainDisplay = chainInfo
-    ? chainInfo.chain.charAt(0).toUpperCase() + chainInfo.chain.slice(1)
-    : "";
+  if (!chainInfo) {
+    throw new Error(`Chain info not found for multisig: ${multisigKey}`);
+  }
+
+  // Capitalize chain name
+  const chainDisplay =
+    chainInfo.chain.charAt(0).toUpperCase() + chainInfo.chain.slice(1);
+  const chainName = chainInfo.chain;
 
   // Prefer txHash (Safe transaction hash) if available in the log,
   // otherwise look it up from ExecutionSuccess events via txHashMap,
@@ -48,7 +54,6 @@ export async function formatDiscordMessage(
   const safeUiUrl = getSafeUiUrl(log.address, txHashForSafe, multisigKey);
 
   // Get chain-specific block explorer
-  const chainName = chainInfo?.chain || "celo"; // Fallback to celo
   const blockExplorer = getBlockExplorer(chainName);
 
   const fields = [
@@ -66,14 +71,10 @@ export async function formatDiscordMessage(
   ];
 
   // Build title: "Mento Labs Multisig [Celo]"
-  const title = chainDisplay
-    ? `${multisigName} [${chainDisplay}]`
-    : multisigName;
+  const title = `${multisigName} [${chainDisplay}]`;
 
-  // Build description: "Event detected on Mento Labs Multisig on Celo"
-  const description = chainDisplay
-    ? `Event detected on ${multisigName} on ${chainDisplay}`
-    : `Event detected on ${multisigName}`;
+  // Build description: "AddedOwner event detected on Mento Labs Multisig on Celo"
+  const description = `\`${eventName}\` event detected on ${multisigName} on ${chainDisplay}`;
 
   // Use current timestamp since block timestamp isn't in decoded log
   return {
@@ -111,13 +112,13 @@ export async function sendToDiscord(
     const txField = embed.fields.find((f) => f.name === "Transaction Hash");
     const txHash = txField?.value.match(/\[([^\]]+)\]/)?.[1] || "unknown";
 
-    console.info("Discord message sent", {
+    logger.info("Discord message sent", {
       description,
       transactionHash: txHash,
     });
   } catch (error) {
     const axiosError = error as AxiosError;
-    console.error("Discord webhook error", {
+    logger.error("Discord webhook error", {
       error:
         axiosError instanceof Error
           ? {

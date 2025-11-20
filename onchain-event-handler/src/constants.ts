@@ -4,10 +4,11 @@
  * Multisig addresses are loaded from environment variables
  */
 
-import { celo, mainnet } from "viem/chains";
 import keccak from "keccak";
+import { celo, mainnet } from "viem/chains";
 import safeAbi from "../safe-abi.json";
-import { config } from "./config";
+import config from "./config";
+import { logger } from "./logger";
 import type {
   EventName,
   EventSignature,
@@ -77,14 +78,7 @@ function extractEventSignatures() {
   return { eventSignatures, securityEvents };
 }
 
-const { eventSignatures, securityEvents } = extractEventSignatures();
-
-/**
- * Mapping of event signatures (topic0) to event names
- * Extracted from Safe contract ABI to ensure consistency
- */
-export const EVENT_SIGNATURES: Record<EventSignature, EventName> =
-  eventSignatures;
+const { securityEvents } = extractEventSignatures();
 
 /**
  * Security events that should be routed to the alerts channel
@@ -122,7 +116,7 @@ export const MULTISIGS: Record<MultisigAddress, MultisigKey> = (() => {
   if (Object.keys(multisigs).length === 0) {
     // In local development, allow empty config
     if (process.env.NODE_ENV !== "production") {
-      console.warn(
+      logger.warn(
         "No multisig addresses configured. Using empty config for local development.",
       );
       return multisigs;
@@ -139,7 +133,7 @@ export const MULTISIGS: Record<MultisigAddress, MultisigKey> = (() => {
  * Chain configuration mapping chain names to their properties
  * Uses viem chain definitions where possible
  */
-export interface ChainConfig {
+interface ChainConfig {
   blockExplorer: {
     baseUrl: string;
     tx: (hash: string) => string;
@@ -172,7 +166,7 @@ function buildBlockExplorer(chain: typeof celo | typeof mainnet) {
   };
 }
 
-export const CHAIN_CONFIGS: Record<string, ChainConfig> = {
+const CHAIN_CONFIGS: Record<string, ChainConfig> = {
   celo: {
     blockExplorer: buildBlockExplorer(celo),
     nativeToken: {

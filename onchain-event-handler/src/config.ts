@@ -1,6 +1,6 @@
 import { JSONSchemaType, envSchema } from "env-schema";
 
-export interface Env {
+interface Env {
   DISCORD_WEBHOOK_ALERTS: string;
   DISCORD_WEBHOOK_EVENTS: string;
   MULTISIG_CONFIG: string;
@@ -23,7 +23,7 @@ const schema: JSONSchemaType<Env> = {
   },
 };
 
-export const config = envSchema({
+const config = envSchema({
   schema,
   dotenv: true, // load .env if it is there
 });

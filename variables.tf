@@ -121,55 +121,55 @@ variable "multisigs" {
   }))
   default = {
     "mento-labs-celo" = {
-      name                   = "Mento Labs Multisig (Celo)"
+      name                   = "Mento Labs Multisig"
       address                = "0x655133d8E90F8190ed5c1F0f3710F602800C0150"
       chain                  = "celo"
       quicknode_network_name = "celo-mainnet"
     }
     "reserve-celo" = {
-      name                   = "Reserve Multisig (Celo)"
+      name                   = "Reserve Multisig"
       address                = "0x87647780180B8f55980C7D3fFeFe08a9B29e9aE1"
       chain                  = "celo"
       quicknode_network_name = "celo-mainnet"
     }
     "mento-labs-eth" = {
-      name                   = "Mento Labs Multisig (Ethereum)"
+      name                   = "Mento Labs Multisig"
       address                = "0xaB125CcB7660b717fc3A1df5d04Ac4cFC3558d8A"
       chain                  = "ethereum"
       quicknode_network_name = "ethereum-mainnet"
     }
     "mento-protocol-foundation-celo" = {
-      name                   = "Mento Protocol Foundation (Celo)"
+      name                   = "Mento Protocol Foundation"
       address                = "0x3468D23A0B1aB3Ab9A537813166A8f7ff1947014"
       chain                  = "celo"
       quicknode_network_name = "celo-mainnet"
     }
     "mento-protocol-foundation-eth" = {
-      name                   = "Mento Protocol Foundation (Ethereum)"
+      name                   = "Mento Protocol Foundation"
       address                = "0x3468D23A0B1aB3Ab9A537813166A8f7ff1947014"
       chain                  = "ethereum"
       quicknode_network_name = "ethereum-mainnet"
     }
     "reserve-eth" = {
-      name                   = "Reserve Multisig (Ethereum)"
+      name                   = "Reserve Multisig"
       address                = "0xd0697f70E79476195B742d5aFAb14BE50f98CC1E"
       chain                  = "ethereum"
       quicknode_network_name = "ethereum-mainnet"
     }
     "reserve-ops-celo" = {
-      name                   = "Reserve Ops Multisig (Celo)"
+      name                   = "Reserve Ops Multisig"
       address                = "0xD3D2e5c5Af667DA817b2D752d86c8f40c22137E1"
       chain                  = "celo"
       quicknode_network_name = "celo-mainnet"
     }
     "reserve-ops-eth" = {
-      name                   = "Reserve Ops Multisig (Ethereum)"
+      name                   = "Reserve Ops Multisig"
       address                = "0xD3D2e5c5Af667DA817b2D752d86c8f40c22137E1"
       chain                  = "ethereum"
       quicknode_network_name = "ethereum-mainnet"
     }
     "mento-watchdog-celo" = {
-      name                   = "Mento Watchdog (Celo)"
+      name                   = "Mento Watchdog"
       address                = "0xE6951C4176aaB41097C6f5fE11e9c515B7108acd"
       chain                  = "celo"
       quicknode_network_name = "celo-mainnet"

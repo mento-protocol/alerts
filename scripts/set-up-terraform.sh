@@ -85,7 +85,7 @@ set_up_terraform() {
 	script_dir=$(dirname "$0")
 	source "${script_dir}/check-gcloud-login.sh"
 
-	check_requirements "terraform" "jq" "gcloud"
+	check_tools "terraform" "jq" "gcloud"
 
 	check_gcloud_iam_permissions
 

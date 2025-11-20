@@ -1,8 +1,10 @@
 # This module deploys the TypeScript Cloud Function that processes QuickNode webhooks and routes them to Discord
 
 
+##################
+# Cloud Function #
+##################
 
-# Cloud Function
 # CKV_GCP_124: ALLOW_ALL ingress - required for QuickNode webhooks from external IPs
 # trunk-ignore(checkov/CKV_GCP_124)
 resource "google_cloudfunctions2_function" "onchain_event_handler" {
@@ -14,7 +16,7 @@ resource "google_cloudfunctions2_function" "onchain_event_handler" {
   labels = var.common_labels
 
   build_config {
-    runtime     = "nodejs22"
+    runtime     = var.runtime
     entry_point = "processQuicknodeWebhook"
     # Specify the service account for Cloud Build to use
     # Use the full resource name format: projects/PROJECT_ID/serviceAccounts/EMAIL
@@ -223,7 +225,7 @@ resource "google_project_iam_member" "cloudbuild_builder" {
 # Create Secret Manager secret for QuickNode signing secret
 resource "google_secret_manager_secret" "quicknode_signing_secret" {
   project   = var.project_id
-  secret_id = "quicknode-signing-secret"
+  secret_id = var.secret_name
 
   replication {
     auto {}
