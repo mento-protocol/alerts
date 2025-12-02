@@ -61,17 +61,21 @@ export const processQuicknodeWebhook = async (
       return;
     }
 
-    const webhookData = payloadValidation.payload.result;
+    const webhookPayload = payloadValidation.payload;
+    const webhookData = webhookPayload.result;
+    const network = webhookPayload.network;
+
     logger.info("Processing webhook", {
       logCount: webhookData.length,
+      network: network || "unknown",
     });
 
     // 4. Build context needed for processing
     // We need this context BEFORE processing to correctly skip ExecutionSuccess duplicates
     const context = buildEventContext(webhookData);
 
-    // 5. Process events with complete context
-    const results = await processEvents(webhookData, context);
+    // 5. Process events with complete context and network info
+    const results = await processEvents(webhookData, context, network);
 
     logger.info("Webhook processing completed", {
       processed: results.length,

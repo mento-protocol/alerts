@@ -7,7 +7,7 @@ import { celo, mainnet } from "viem/chains";
 import config from "./config";
 import {
   DEFAULT_TOKEN_DECIMALS,
-  MULTISIGS,
+  MULTISIGS_BY_CHAIN,
   SECURITY_EVENTS,
   getChainConfig,
 } from "./constants";
@@ -23,11 +23,16 @@ const VIEM_CHAINS: Record<string, typeof celo | typeof mainnet> = {
 };
 
 /**
- * Get multisig key from contract address
+ * Get multisig key from contract address and chain
+ * @param address - The multisig contract address
+ * @param chain - Chain name (e.g., "celo", "ethereum")
+ * @returns The multisig key, or null if not found
  */
-export function getMultisigKey(address: string): string | null {
+export function getMultisigKey(address: string, chain: string): string | null {
   const normalizedAddress = address.toLowerCase();
-  return MULTISIGS[normalizedAddress] || null;
+  const normalizedChain = chain.toLowerCase();
+  const compositeKey = `${normalizedAddress}:${normalizedChain}`;
+  return MULTISIGS_BY_CHAIN[compositeKey] || null;
 }
 
 /**
@@ -206,9 +211,8 @@ export async function decodeEventData(
   if (formatter) {
     // Special handling for SafeMultiSigTransaction which needs chainName
     if (eventName === "SafeMultiSigTransaction") {
-      const { formatSafeMultiSigTransactionEvent } = await import(
-        "./event-formatters/transaction-formatters"
-      );
+      const { formatSafeMultiSigTransactionEvent } =
+        await import("./event-formatters/transaction-formatters");
       return formatSafeMultiSigTransactionEvent(
         log,
         chainTokenConfig,
