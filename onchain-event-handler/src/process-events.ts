@@ -1,13 +1,29 @@
 import type { EventContext } from "./build-event-context";
-import { mapQuickNodeNetworkToChain } from "./constants";
 import { formatDiscordMessage, sendToDiscord } from "./discord";
 import { logger } from "./logger";
-import type {
-  ProcessedEvent,
-  QuickNodeNetwork,
-  QuickNodeWebhookPayload,
-} from "./types";
-import { getMultisigKey, getWebhookUrl, isSecurityEvent } from "./utils";
+import type { ProcessedEvent, QuickNodeWebhookPayload } from "./types";
+import {
+  findChainForAddress,
+  findChainFromBlockHash,
+  getMultisigKey,
+  getWebhookUrl,
+  isSecurityEvent,
+} from "./utils";
+
+/**
+ * Error thrown when chain cannot be determined from webhook payload
+ */
+export class ChainDetectionError extends Error {
+  constructor(
+    message: string,
+    public readonly address: string,
+    public readonly blockHash?: string,
+    public readonly transactionHash?: string,
+  ) {
+    super(message);
+    this.name = "ChainDetectionError";
+  }
+}
 
 /**
  * Process all events from webhook payload
@@ -15,13 +31,11 @@ import { getMultisigKey, getWebhookUrl, isSecurityEvent } from "./utils";
  *
  * @param logs - Array of decoded log entries from QuickNode webhook
  * @param context - Event context built from first pass
- * @param network - QuickNode network identifier (e.g., "celo-mainnet", "ethereum-mainnet")
  * @returns Array of successfully processed events
  */
 export async function processEvents(
   logs: QuickNodeWebhookPayload["result"],
   context: EventContext,
-  network?: QuickNodeNetwork,
 ): Promise<ProcessedEvent[]> {
   const { txHashMap, hasSafeMultiSigTx } = context;
 
@@ -45,7 +59,7 @@ export async function processEvents(
   const results = await Promise.all(
     logsToProcess.map(async (logEntry) => {
       try {
-        return await processEvent(logEntry, txHashMap, network);
+        return await processEvent(logEntry, txHashMap);
       } catch (error) {
         logger.error("Error processing log", {
           error:
@@ -99,13 +113,11 @@ function validateLog(log: QuickNodeWebhookPayload["result"][0]): {
  *
  * @param logEntry - The decoded log entry from QuickNode webhook
  * @param txHashMap - Map of transactionHash -> Safe txHash for linking transactions
- * @param network - QuickNode network identifier (e.g., "celo-mainnet", "ethereum-mainnet")
  * @returns ProcessedEvent if successful, null if event should be skipped
  */
 async function processEvent(
   logEntry: QuickNodeWebhookPayload["result"][0],
   txHashMap: Map<string, string>,
-  network?: QuickNodeNetwork,
 ): Promise<ProcessedEvent | null> {
   // 1. Validate required fields
   const validation = validateLog(logEntry);
@@ -125,23 +137,33 @@ async function processEvent(
   // 3. Identify multisig with chain-aware lookup
   const multisigAddress = logEntry.address!.toLowerCase();
 
-  // Determine chain from QuickNode network identifier
-  if (!network) {
-    logger.warn("Missing network information in webhook payload", {
-      address: multisigAddress,
-      transactionHash: logEntry.transactionHash,
-    });
-    return null;
+  // Determine chain from block hash (most reliable when same address exists on multiple chains)
+  // Fall back to address lookup if block hash is not available
+  let chain: string | null = null;
+
+  if (logEntry.blockHash && typeof logEntry.blockHash === "string") {
+    chain = await findChainFromBlockHash(logEntry.blockHash, multisigAddress);
   }
 
-  const chain = mapQuickNodeNetworkToChain(network);
+  // Fallback to address lookup if block hash verification didn't work
   if (!chain) {
-    logger.warn("Unknown QuickNode network", {
-      network,
+    chain = findChainForAddress(multisigAddress);
+  }
+
+  if (!chain) {
+    const errorMessage =
+      "Could not determine chain from block hash or address. The multisig address may not be configured, or the block hash could not be verified on any known chain.";
+    logger.error("Chain detection failed", {
       address: multisigAddress,
+      blockHash: logEntry.blockHash,
       transactionHash: logEntry.transactionHash,
     });
-    return null;
+    throw new ChainDetectionError(
+      errorMessage,
+      multisigAddress,
+      logEntry.blockHash as string | undefined,
+      logEntry.transactionHash,
+    );
   }
 
   // Get multisig key using chain-aware lookup

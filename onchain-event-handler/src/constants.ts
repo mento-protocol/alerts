@@ -9,7 +9,6 @@ import { celo, mainnet } from "viem/chains";
 import safeAbi from "../safe-abi.json";
 import config from "./config";
 import type { EventName, EventSignature, MultisigKey } from "./types";
-import { QuickNodeNetwork } from "./types";
 
 /**
  * Security event names that should be routed to the alerts channel
@@ -111,28 +110,6 @@ export const MULTISIGS_BY_CHAIN: Record<string, MultisigKey> = (() => {
 
   return multisigsByChain;
 })();
-
-/**
- * Map QuickNode network names to our chain names
- * @param quicknodeNetwork - QuickNode network identifier (e.g., "celo-mainnet", "ethereum-mainnet")
- * @returns Chain name (e.g., "celo", "ethereum") or null if not found
- */
-export function mapQuickNodeNetworkToChain(
-  quicknodeNetwork: string | QuickNodeNetwork,
-): string | null {
-  // Convert enum to string if needed, then normalize
-  const networkString =
-    typeof quicknodeNetwork === "string" ? quicknodeNetwork : quicknodeNetwork;
-  const normalized = networkString.toLowerCase();
-
-  // Map QuickNode network names to our chain names
-  const networkMap: Record<string, string> = {
-    [QuickNodeNetwork.CELO_MAINNET]: "celo",
-    [QuickNodeNetwork.ETHEREUM_MAINNET]: "ethereum",
-  };
-
-  return networkMap[normalized] || null;
-}
 
 /**
  * Chain configuration mapping chain names to their properties
