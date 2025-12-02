@@ -8,13 +8,8 @@ import keccak from "keccak";
 import { celo, mainnet } from "viem/chains";
 import safeAbi from "../safe-abi.json";
 import config from "./config";
-import { logger } from "./logger";
-import type {
-  EventName,
-  EventSignature,
-  MultisigAddress,
-  MultisigKey,
-} from "./types";
+import type { EventName, EventSignature, MultisigKey } from "./types";
+import { QuickNodeNetwork } from "./types";
 
 /**
  * Security event names that should be routed to the alerts channel
@@ -86,11 +81,11 @@ const { securityEvents } = extractEventSignatures();
 export const SECURITY_EVENTS: EventName[] = securityEvents;
 
 /**
- * Mapping of multisig addresses to their keys
- * Loaded from MULTISIG_CONFIG JSON environment variable passed by Terraform
+ * Chain-aware mapping of address+chain to multisig key
+ * This prevents collisions when the same address exists on multiple chains
  */
-export const MULTISIGS: Record<MultisigAddress, MultisigKey> = (() => {
-  const multisigs: Record<MultisigAddress, MultisigKey> = {};
+export const MULTISIGS_BY_CHAIN: Record<string, MultisigKey> = (() => {
+  const multisigsByChain: Record<string, MultisigKey> = {};
 
   // Load multisig config from JSON environment variable
   const multisigConfigJson = config.MULTISIG_CONFIG;
@@ -101,10 +96,12 @@ export const MULTISIGS: Record<MultisigAddress, MultisigKey> = (() => {
       { address: string; name: string; chain: string }
     >;
 
-    // Build mapping: address -> key (the key from the config map)
+    // Build mapping: address:chain -> key
     for (const [key, multisigConfigItem] of Object.entries(multisigConfig)) {
       const normalizedAddress = multisigConfigItem.address.toLowerCase();
-      multisigs[normalizedAddress] = key;
+      const chain = multisigConfigItem.chain.toLowerCase();
+      const compositeKey = `${normalizedAddress}:${chain}`;
+      multisigsByChain[compositeKey] = key;
     }
   } catch (error) {
     throw new Error(
@@ -112,22 +109,30 @@ export const MULTISIGS: Record<MultisigAddress, MultisigKey> = (() => {
     );
   }
 
-  // Validate that we have at least one multisig configured
-  if (Object.keys(multisigs).length === 0) {
-    // In local development, allow empty config
-    if (process.env.NODE_ENV !== "production") {
-      logger.warn(
-        "No multisig addresses configured. Using empty config for local development.",
-      );
-      return multisigs;
-    }
-    throw new Error(
-      "No multisig addresses configured. Check MULTISIG_CONFIG environment variable.",
-    );
-  }
-
-  return multisigs;
+  return multisigsByChain;
 })();
+
+/**
+ * Map QuickNode network names to our chain names
+ * @param quicknodeNetwork - QuickNode network identifier (e.g., "celo-mainnet", "ethereum-mainnet")
+ * @returns Chain name (e.g., "celo", "ethereum") or null if not found
+ */
+export function mapQuickNodeNetworkToChain(
+  quicknodeNetwork: string | QuickNodeNetwork,
+): string | null {
+  // Convert enum to string if needed, then normalize
+  const networkString =
+    typeof quicknodeNetwork === "string" ? quicknodeNetwork : quicknodeNetwork;
+  const normalized = networkString.toLowerCase();
+
+  // Map QuickNode network names to our chain names
+  const networkMap: Record<string, string> = {
+    [QuickNodeNetwork.CELO_MAINNET]: "celo",
+    [QuickNodeNetwork.ETHEREUM_MAINNET]: "ethereum",
+  };
+
+  return networkMap[normalized] || null;
+}
 
 /**
  * Chain configuration mapping chain names to their properties

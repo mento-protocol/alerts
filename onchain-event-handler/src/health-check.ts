@@ -1,6 +1,6 @@
 import { Response } from "@google-cloud/functions-framework";
 import config from "./config";
-import { MULTISIGS } from "./constants";
+import { MULTISIGS_BY_CHAIN } from "./constants";
 
 /**
  * Health check endpoint handler
@@ -42,7 +42,7 @@ export function handleHealthCheck(res: Response): void {
 
   // Check multisig config parsing
   try {
-    const multisigCount = Object.keys(MULTISIGS).length;
+    const multisigCount = Object.keys(MULTISIGS_BY_CHAIN).length;
     checks.multisigs = {
       status: multisigCount > 0 ? "ok" : "warning",
       message:

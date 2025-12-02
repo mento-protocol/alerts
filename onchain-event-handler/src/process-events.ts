@@ -1,7 +1,12 @@
 import type { EventContext } from "./build-event-context";
+import { mapQuickNodeNetworkToChain } from "./constants";
 import { formatDiscordMessage, sendToDiscord } from "./discord";
 import { logger } from "./logger";
-import type { ProcessedEvent, QuickNodeWebhookPayload } from "./types";
+import type {
+  ProcessedEvent,
+  QuickNodeNetwork,
+  QuickNodeWebhookPayload,
+} from "./types";
 import { getMultisigKey, getWebhookUrl, isSecurityEvent } from "./utils";
 
 /**
@@ -10,11 +15,13 @@ import { getMultisigKey, getWebhookUrl, isSecurityEvent } from "./utils";
  *
  * @param logs - Array of decoded log entries from QuickNode webhook
  * @param context - Event context built from first pass
+ * @param network - QuickNode network identifier (e.g., "celo-mainnet", "ethereum-mainnet")
  * @returns Array of successfully processed events
  */
 export async function processEvents(
   logs: QuickNodeWebhookPayload["result"],
   context: EventContext,
+  network?: QuickNodeNetwork,
 ): Promise<ProcessedEvent[]> {
   const { txHashMap, hasSafeMultiSigTx } = context;
 
@@ -38,7 +45,7 @@ export async function processEvents(
   const results = await Promise.all(
     logsToProcess.map(async (logEntry) => {
       try {
-        return await processEvent(logEntry, txHashMap);
+        return await processEvent(logEntry, txHashMap, network);
       } catch (error) {
         logger.error("Error processing log", {
           error:
@@ -92,11 +99,13 @@ function validateLog(log: QuickNodeWebhookPayload["result"][0]): {
  *
  * @param logEntry - The decoded log entry from QuickNode webhook
  * @param txHashMap - Map of transactionHash -> Safe txHash for linking transactions
+ * @param network - QuickNode network identifier (e.g., "celo-mainnet", "ethereum-mainnet")
  * @returns ProcessedEvent if successful, null if event should be skipped
  */
 async function processEvent(
   logEntry: QuickNodeWebhookPayload["result"][0],
   txHashMap: Map<string, string>,
+  network?: QuickNodeNetwork,
 ): Promise<ProcessedEvent | null> {
   // 1. Validate required fields
   const validation = validateLog(logEntry);
@@ -113,13 +122,36 @@ async function processEvent(
   // 2. Get event name from decoded log
   const eventName = logEntry.name!;
 
-  // 3. Identify multisig
+  // 3. Identify multisig with chain-aware lookup
   const multisigAddress = logEntry.address!.toLowerCase();
-  const multisigKey = getMultisigKey(multisigAddress);
+
+  // Determine chain from QuickNode network identifier
+  if (!network) {
+    logger.warn("Missing network information in webhook payload", {
+      address: multisigAddress,
+      transactionHash: logEntry.transactionHash,
+    });
+    return null;
+  }
+
+  const chain = mapQuickNodeNetworkToChain(network);
+  if (!chain) {
+    logger.warn("Unknown QuickNode network", {
+      network,
+      address: multisigAddress,
+      transactionHash: logEntry.transactionHash,
+    });
+    return null;
+  }
+
+  // Get multisig key using chain-aware lookup
+  const multisigKey = getMultisigKey(multisigAddress, chain);
 
   if (!multisigKey) {
-    logger.warn("Unknown multisig address", {
+    logger.warn("Unknown multisig address for chain", {
       address: multisigAddress,
+      chain,
+      transactionHash: logEntry.transactionHash,
     });
     return null;
   }

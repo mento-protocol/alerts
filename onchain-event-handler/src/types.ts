@@ -14,6 +14,7 @@ export interface QuickNodeDecodedLog {
 }
 
 export interface QuickNodeWebhookPayload {
+  network?: QuickNodeNetwork; // QuickNode network identifier (e.g., "celo-mainnet", "ethereum-mainnet")
   result: QuickNodeDecodedLog[];
 }
 
@@ -45,3 +46,12 @@ export type EventSignature = string;
 export type EventName = string;
 export type MultisigKey = string;
 export type MultisigAddress = string;
+
+/**
+ * QuickNode network identifiers
+ * Enum of QuickNode networks we currently have multisigs configured for
+ */
+export enum QuickNodeNetwork {
+  CELO_MAINNET = "celo-mainnet",
+  ETHEREUM_MAINNET = "ethereum-mainnet",
+}
