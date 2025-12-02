@@ -182,6 +182,14 @@ resource "google_cloudfunctions2_function_iam_member" "cloud_function_invoker" {
   # Explicitly depend on the function to ensure IAM binding is applied after function creation
   # This prevents 403 errors when the function is recreated
   depends_on = [google_cloudfunctions2_function.onchain_event_handler]
+
+  # Force IAM binding to be reapplied when the function is recreated
+  # This ensures bindings persist across function replacements
+  lifecycle {
+    replace_triggered_by = [
+      google_cloudfunctions2_function.onchain_event_handler
+    ]
+  }
 }
 
 # Also set IAM on the underlying Cloud Run service (required for Cloud Functions Gen2)
@@ -193,6 +201,14 @@ resource "google_cloud_run_v2_service_iam_member" "cloud_run_invoker" {
   member   = "allUsers"
 
   depends_on = [google_cloudfunctions2_function.onchain_event_handler]
+
+  # Force IAM binding to be reapplied when the function is recreated
+  # This ensures bindings persist across function replacements (which recreate the underlying Cloud Run service)
+  lifecycle {
+    replace_triggered_by = [
+      google_cloudfunctions2_function.onchain_event_handler
+    ]
+  }
 }
 
 

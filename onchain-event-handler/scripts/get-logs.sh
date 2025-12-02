@@ -62,22 +62,96 @@ select(.log != null) |
 } | select(.timestamp_iso != null)'
 
 		# Process Cloud Run stdout logs (structured JSON logs with severity)
-		echo "${cloudrun_logs}" | jq '.[] |
+		# Cloud Run logs can have either jsonPayload (structured) or textPayload (plain text)
+		# jsonPayload structure: { logName, message: { message, ...metadata } } or { severity, message, ...metadata }
+		# shellcheck disable=SC1078,SC1079,SC2026
+		cloudrun_jq_script=$(
+			cat <<'JQ_SCRIPT'
+.[] |
 {
   timestamp_iso: .timestamp,
   timestamp: (.timestamp | split("T")[0] + " " + (split("T")[1] | split(".")[0])),
   type: "stdout",
   textPayload: .textPayload,
-  jsonPayload: (.textPayload | try fromjson catch null)
-} | if .jsonPayload != null and .jsonPayload.severity != null then
+  jsonPayload: (
+    if .jsonPayload != null then
+      .jsonPayload
+    elif .textPayload != null then
+      (.textPayload | try fromjson catch null)
+    else
+      null
+    end
+  )
+} | if .jsonPayload != null then
+  # Handle structured JSON payload
+  # Cloud Run wraps logs in { logName, message: {...} } structure
+  # Our logger creates { severity, message, ...metadata } structure
+  # Extract the actual log data, handling both structures
+  (
+    if .jsonPayload.severity != null then
+      # Direct severity field (from our logger)
+      {
+        severity: .jsonPayload.severity,
+        logData: (.jsonPayload | del(.severity, .logName))
+      }
+    elif .jsonPayload.message != null then
+      # Nested message structure (Cloud Run wrapper)
+      if (.jsonPayload.message | type) == "object" then
+        # message is an object with fields like { message, processed, total, ... }
+        {
+          severity: .jsonPayload.message.severity,
+          logData: .jsonPayload.message
+        }
+      else
+        # message is a string
+        {
+          severity: null,
+          logData: { message: .jsonPayload.message }
+        }
+      end
+    else
+      # No message field, use entire payload (excluding logName)
+      {
+        severity: null,
+        logData: (.jsonPayload | del(.logName))
+      }
+    end
+  ) as $parsed |
+  # Extract message and metadata from logData
+  # logData structure: { message: "text", field1: value1, field2: value2, ... }
+  (
+    if $parsed.logData.message != null then
+      if ($parsed.logData.message | type) == "string" then
+        $parsed.logData.message
+      else
+        # message is an object, try to extract a message field or convert to string
+        $parsed.logData.message.message // ($parsed.logData.message | tostring)
+      end
+    else
+      # No message field, convert entire logData to string
+      ($parsed.logData | tostring)
+    end
+  ) as $message |
+  (
+    # Extract all fields except "message" as metadata
+    ($parsed.logData | del(.message) | to_entries | map("\(.key)=\(.value | tostring)") | join(", "))
+  ) as $metadata |
   . + {
-    severity: .jsonPayload.severity,
-    message: (.jsonPayload.message // .textPayload),
-    metadata: (.jsonPayload | del(.severity, .message) | to_entries | map("\(.key)=\(.value | tostring)") | join(", "))
+    severity: $parsed.severity,
+    message: $message,
+    metadata: $metadata,
+    fullJson: null
   }
+elif .textPayload != null then
+  # Plain text payload
+  . + { severity: null, message: .textPayload, metadata: "", fullJson: null }
 else
-  . + { severity: null, message: .textPayload, metadata: "" }
-end'
+  # Fallback for empty logs
+  . + { severity: null, message: "(empty log entry)", metadata: "", fullJson: null }
+end
+JQ_SCRIPT
+		)
+		echo "${cloudrun_logs}" | jq -r "${cloudrun_jq_script}"
 
 		# Process Cloud Run HTTP request logs
 		echo "${request_logs}" | jq '.[] |
@@ -115,9 +189,13 @@ elif .type == "stdout" then
     else
       "[\(.severity)] __YELLOW__\(.timestamp)__NC__: \($log_line)"
     end
+  elif .message != null and .message != "" then
+    # Display message content with metadata if available
+    (if .metadata != null and .metadata != "" then "\(.message) {\(.metadata)}" else .message end) as $log_line |
+    "[LOG] __YELLOW__\(.timestamp)__NC__: \($log_line)"
   else
-    # Fallback for non-JSON logs
-    "[LOG] __YELLOW__\(.timestamp)__NC__: \(.textPayload)"
+    # Fallback for empty logs
+    "[LOG] __YELLOW__\(.timestamp)__NC__: (empty log entry)"
   end
 elif .type == "request" then
   "[\(.httpRequest.requestMethod)] __YELLOW__\(.timestamp)__NC__: \(.httpRequest.status) \(.httpRequest.responseSize // 0 | tonumber)B \(.httpRequest.latency // "0s" | rtrimstr("s") | tonumber * 1000 | round)ms \(.httpRequest.userAgent // "unknown")"

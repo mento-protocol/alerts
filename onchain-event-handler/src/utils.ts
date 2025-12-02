@@ -36,6 +36,125 @@ export function getMultisigKey(address: string, chain: string): string | null {
 }
 
 /**
+ * Verify if a block hash exists on a given chain
+ * @param blockHash - The block hash to verify
+ * @param chainName - The chain name to check (e.g., "celo", "ethereum")
+ * @returns true if block exists on the chain, false otherwise
+ */
+async function verifyBlockHashOnChain(
+  blockHash: string,
+  chainName: string,
+): Promise<boolean> {
+  try {
+    const chainConfig = getChainConfig(chainName);
+    if (!chainConfig) {
+      return false;
+    }
+
+    const viemChain = VIEM_CHAINS[chainName.toLowerCase()];
+    if (!viemChain) {
+      return false;
+    }
+
+    const publicClient = createPublicClient({
+      chain: viemChain,
+      transport: http(chainConfig.rpcEndpoint, {
+        timeout: 5000, // 5 second timeout to prevent hanging
+      }),
+    });
+
+    // Try to get the block by hash - if it exists, this will succeed
+    await publicClient.getBlock({
+      blockHash: blockHash as `0x${string}`,
+    });
+
+    return true;
+  } catch {
+    // Block doesn't exist on this chain or RPC call failed/timed out
+    return false;
+  }
+}
+
+/**
+ * Find the chain for a given multisig address by trying all known chains
+ * QuickNode webhooks don't include network information, so we determine it from the address
+ * @param address - The multisig contract address
+ * @returns The chain name if found, or null if not found in any chain
+ */
+export function findChainForAddress(address: string): string | null {
+  const normalizedAddress = address.toLowerCase();
+  const knownChains = ["celo", "ethereum"];
+
+  for (const chain of knownChains) {
+    const compositeKey = `${normalizedAddress}:${chain}`;
+    if (MULTISIGS_BY_CHAIN[compositeKey]) {
+      return chain;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Determine chain from block hash by verifying it exists on each chain
+ * This is the most reliable method when the same address exists on multiple chains
+ * @param blockHash - The block hash from the webhook payload
+ * @param address - The multisig address (used as fallback)
+ * @returns The chain name if determined, or null if not found
+ */
+export async function findChainFromBlockHash(
+  blockHash: string,
+  address: string,
+): Promise<string | null> {
+  // First, try to find chains that have this address
+  const possibleChains: string[] = [];
+  const normalizedAddress = address.toLowerCase();
+  const knownChains = ["celo", "ethereum"];
+
+  for (const chain of knownChains) {
+    const compositeKey = `${normalizedAddress}:${chain}`;
+    if (MULTISIGS_BY_CHAIN[compositeKey]) {
+      possibleChains.push(chain);
+    }
+  }
+
+  // If address only exists on one chain, return it immediately
+  if (possibleChains.length === 1) {
+    return possibleChains[0];
+  }
+
+  // If address doesn't exist on any chain, return null
+  if (possibleChains.length === 0) {
+    return null;
+  }
+
+  // If address exists on multiple chains, verify block hash on each
+  // Check all possible chains in parallel for speed
+  const verificationResults = await Promise.allSettled(
+    possibleChains.map(async (chain) => {
+      const exists = await verifyBlockHashOnChain(blockHash, chain);
+      return { chain, exists };
+    }),
+  );
+
+  // Find the chain where the block hash exists
+  for (const result of verificationResults) {
+    if (result.status === "fulfilled" && result.value.exists) {
+      return result.value.chain;
+    }
+  }
+
+  // If block hash verification failed for all chains, fall back to first possible chain
+  // This handles cases where RPC calls fail but we still want to process the event
+  logger.warn("Could not verify block hash on any chain, using first match", {
+    blockHash,
+    address,
+    possibleChains,
+  });
+  return possibleChains[0];
+}
+
+/**
  * Determine if event is a security event
  */
 export function isSecurityEvent(eventName: string): boolean {

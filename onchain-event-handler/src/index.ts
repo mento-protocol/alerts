@@ -3,7 +3,7 @@ import { buildEventContext } from "./build-event-context";
 import { checkPayloadSize } from "./check-payload-size";
 import { handleHealthCheck } from "./health-check";
 import { logger } from "./logger";
-import { processEvents } from "./process-events";
+import { ChainDetectionError, processEvents } from "./process-events";
 import { validatePayload } from "./validate-payload";
 import { validateQuickNodeWebhook } from "./validate-quicknode-webhook";
 
@@ -63,19 +63,17 @@ export const processQuicknodeWebhook = async (
 
     const webhookPayload = payloadValidation.payload;
     const webhookData = webhookPayload.result;
-    const network = webhookPayload.network;
 
     logger.info("Processing webhook", {
       logCount: webhookData.length,
-      network: network || "unknown",
     });
 
     // 4. Build context needed for processing
     // We need this context BEFORE processing to correctly skip ExecutionSuccess duplicates
     const context = buildEventContext(webhookData);
 
-    // 5. Process events with complete context and network info
-    const results = await processEvents(webhookData, context, network);
+    // 5. Process events with complete context
+    const results = await processEvents(webhookData, context);
 
     logger.info("Webhook processing completed", {
       processed: results.length,
@@ -88,6 +86,27 @@ export const processQuicknodeWebhook = async (
       total: webhookData.length,
     });
   } catch (error) {
+    // Handle chain detection errors with a specific HTTP status code
+    if (error instanceof ChainDetectionError) {
+      logger.error("Chain detection failed", {
+        error: error.message,
+        address: error.address,
+        blockHash: error.blockHash,
+        transactionHash: error.transactionHash,
+      });
+      res.status(422).json({
+        error: "Unprocessable Entity",
+        message: error.message,
+        details: {
+          address: error.address,
+          blockHash: error.blockHash,
+          transactionHash: error.transactionHash,
+        },
+      });
+      return;
+    }
+
+    // Handle other errors as internal server errors
     logger.error("Webhook processing error", {
       error:
         error instanceof Error
