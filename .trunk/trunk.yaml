@@ -19,14 +19,14 @@ runtimes:
 lint:
   enabled:
     - actionlint@1.7.8
-    - checkov@3.2.493
+    - checkov@3.2.495
     - eslint@9.39.1
     - git-diff-check
     - gitleaks@8.29.0
-    - markdownlint@0.45.0
+    - markdownlint@0.46.0
     - osv-scanner@2.2.4
     - pre-commit-hooks@5.0.0
-    - prettier@3.6.2
+    - prettier@3.7.3
     - shellcheck@0.11.0
     - shfmt@3.6.0
     - taplo@0.10.0
